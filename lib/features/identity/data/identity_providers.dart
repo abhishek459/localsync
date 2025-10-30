@@ -4,22 +4,27 @@ import 'package:local_sync/features/identity/application/identity_service.dart';
 import 'package:local_sync/features/identity/domain/device_identity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Provider for the secure storage instance.
+/// Provides a singleton instance of FlutterSecureStorage.
 final secureStorageProvider = Provider((_) => const FlutterSecureStorage());
 
-/// The main provider for the device's cryptographic identity.
+/// Provides the SharedPreferences instance asynchronously.
+final sharedPreferencesProvider = FutureProvider(
+  (ref) => SharedPreferences.getInstance(),
+);
+
+/// Provides the main DeviceIdentity object for the app.
 ///
-/// This provider handles initializing all dependencies (secure storage, prefs)
-/// and then uses the [IdentityService] to get or create the identity.
+/// This provider handles all asynchronous initialization and provides a
+/// clean AsyncValue (loading, data, error) to the UI.
 final deviceIdentityProvider = FutureProvider<DeviceIdentity>((ref) async {
+  // We depend on SharedPreferences being ready.
+  final prefs = await ref.watch(sharedPreferencesProvider.future);
+  // We also depend on secure storage (which is synchronous).
   final secureStorage = ref.watch(secureStorageProvider);
 
-  // SharedPreferences is async, so we must await it.
-  final prefs = await SharedPreferences.getInstance();
-
-  // Instantiate the service with its dependencies.
+  // Once dependencies are ready, create the service.
   final service = IdentityService(secureStorage, prefs);
 
-  // Get or create the identity.
+  // Get or create the identity. This is the main async work.
   return service.getOrCreateIdentity();
 });

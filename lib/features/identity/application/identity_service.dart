@@ -45,6 +45,7 @@ class IdentityService {
 
       return DeviceIdentity(
         privateKey: privateKey,
+        privateKeyPem: privateKeyPem,
         certificate: certificate,
         fingerprint: fingerprint,
       );
@@ -93,6 +94,7 @@ class IdentityService {
 
     return DeviceIdentity(
       privateKey: rsaPrivateKey,
+      privateKeyPem: privateKeyPem,
       certificate: certificate,
       fingerprint: fingerprint,
     );
