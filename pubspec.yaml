@@ -1,0 +1,26 @@
+name: local_sync
+description: "A new Flutter project."
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  basic_utils: ^5.8.2
+  pointycastle: ^4.0.0
+  flutter_secure_storage: ^9.2.4
+  shared_preferences: ^2.5.3
+  flutter_riverpod: ^3.0.3
+  bonsoir: ^6.0.1
+  device_info_plus: ^12.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
