@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_sync/features/connection/data/connection_providers.dart';
 import 'package:local_sync/features/discovery/data/discovery_providers.dart';
 import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
 
@@ -10,17 +11,26 @@ class PeerListView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We watch the provider *here*, inside the new widget.
     final peersAsync = ref.watch(discoveredPeersProvider);
 
-    // We return the Card and the .when() block that was
-    // previously in main.dart.
     return Card(
       elevation: 2,
       color: Theme.of(context).colorScheme.surface,
       child: peersAsync.when(
-        // We now pass the data to our new, private widget.
-        data: (peers) => _PeerList(peers: peers),
+        data: (peers) {
+          void handlePeerTap(DiscoveredPeer peer) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Attempting to connect to ${peer.name}...'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+
+            ref.read(connectionServiceProvider).connectToPeer(peer);
+          }
+
+          return _PeerList(peers: peers, onPeerTapped: handlePeerTap);
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(
           child: Text(
@@ -31,13 +41,13 @@ class PeerListView extends ConsumerWidget {
       ),
     );
   }
-
-  // The _buildPeersList method has been removed from here.
 }
 
 class _PeerList extends StatelessWidget {
   final List<DiscoveredPeer> peers;
-  const _PeerList({required this.peers});
+  final void Function(DiscoveredPeer) onPeerTapped;
+
+  const _PeerList({required this.peers, required this.onPeerTapped});
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +72,7 @@ class _PeerList extends StatelessWidget {
             '${peer.host}:${peer.port}\nID: ...${peer.id.substring(peer.id.length - 8)}',
             style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
           ),
+          onTap: () => onPeerTapped(peer),
         );
       },
     );
