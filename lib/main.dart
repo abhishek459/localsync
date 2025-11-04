@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/discovery/presentation/peer_list_view.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
+import 'package:local_sync/features/pairing/data/pairing_providers.dart';
+import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
@@ -29,16 +31,72 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends ConsumerWidget {
+// Converted to ConsumerStatefulWidget to manage the _isModalOpen state.
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  // State variable to prevent opening multiple modals.
+  bool _isModalOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
     // Watch our identity provider
     final identityAsync = ref.watch(deviceIdentityProvider);
 
+    // --- Robust Bridge Listener (Refactored) ---
+    ref.listen(pairingRequestProvider, (previous, next) {
+      // If a request is made (next == true) AND the modal isn't already open
+      if (next == true && !_isModalOpen) {
+        // Set state to true immediately to block concurrent requests
+        setState(() {
+          _isModalOpen = true;
+        });
+
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true, // Required for fractional height
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          clipBehavior: Clip.antiAliasWithSaveLayer,
+          builder: (context) {
+            // Use FractionallySizedBox to control the height
+            return const FractionallySizedBox(
+              heightFactor: 0.85, // Replaces the old heightFactor parameter
+              child: PairingScreen(),
+            );
+          },
+        ).whenComplete(() {
+          // When the sheet is dismissed (for any reason), update our state.
+          setState(() {
+            _isModalOpen = false;
+          });
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ref.read(pairingRequestProvider.notifier).consume();
+        });
+      }
+    });
+
     return Scaffold(
-      appBar: AppBar(title: const Text('LocalSync (Step 2: Discovery)')),
+      appBar: AppBar(
+        title: const Text('LocalSync'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add_alt_1_outlined),
+            tooltip: 'Add a new device',
+            onPressed: () {
+              ref.read(pairingRequestProvider.notifier).request();
+            },
+          ),
+        ],
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),

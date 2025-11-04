@@ -22,10 +22,10 @@ final databaseProvider = FutureProvider<Database>((ref) {
 });
 
 /// Provider for the singleton TrustService (Repository).
-final trustServiceProvider = Provider<TrustService>((ref) {
+final trustServiceProvider = FutureProvider<TrustService>((ref) async {
   // This provider will either get the DB or throw an error
   // if it's not ready, which is what we want.
-  final db = ref.watch(databaseProvider).requireValue;
+  final db = await ref.watch(databaseProvider.future);
   return TrustService(db);
 });
 
@@ -41,13 +41,13 @@ class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
   @override
   Future<List<TrustedPeer>> build() async {
     // Load the initial list of peers from the database
-    final trustService = ref.watch(trustServiceProvider);
+    final trustService = await ref.watch(trustServiceProvider.future);
     return trustService.getTrustedPeers();
   }
 
   /// Adds a new peer (from QR scan data) to the database and refreshes the state.
   Future<void> addPeerFromPairingData(PairingData data, String peerName) async {
-    final trustService = ref.read(trustServiceProvider);
+    final trustService = await ref.read(trustServiceProvider.future);
     final peer = TrustedPeer(
       fingerprint: data.fingerprint,
       name: peerName, // We can get this from the QR or cert
@@ -67,7 +67,7 @@ class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
     String fingerprint,
     String peerName,
   ) async {
-    final trustService = ref.read(trustServiceProvider);
+    final trustService = await ref.read(trustServiceProvider.future);
     final peer = TrustedPeer(
       fingerprint: fingerprint,
       name: peerName,
@@ -80,7 +80,7 @@ class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
 
   /// Removes a peer from the database and refreshes the state.
   Future<void> removePeer(String fingerprint) async {
-    final trustService = ref.read(trustServiceProvider);
+    final trustService = await ref.read(trustServiceProvider.future);
 
     // Update the DB
     await trustService.untrustPeer(fingerprint);
