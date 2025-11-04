@@ -1,46 +1,42 @@
 import 'dart:async';
-
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:local_sync/features/trust/application/database_service.dart';
 import 'package:local_sync/features/trust/application/trust_service.dart';
 import 'package:local_sync/features/trust/domain/trusted_peer.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+part 'trust_providers.g.dart';
+
 /// Provider for the singleton DatabaseService.
-final databaseServiceProvider = Provider<DatabaseService>((ref) {
+@Riverpod(keepAlive: true)
+DatabaseService databaseService(Ref ref) {
   final dbService = DatabaseService();
   ref.onDispose(() => dbService.dispose());
   return dbService;
-});
+}
 
 /// Asynchronously provides the opened [Database] object.
-/// Other services will watch this.
-final databaseProvider = FutureProvider<Database>((ref) {
+@Riverpod(keepAlive: true)
+Future<Database> database(Ref ref) {
   final dbService = ref.watch(databaseServiceProvider);
   return dbService.db;
-});
+}
 
 /// Provider for the singleton TrustService (Repository).
-final trustServiceProvider = FutureProvider<TrustService>((ref) async {
-  // This provider will either get the DB or throw an error
-  // if it's not ready, which is what we want.
+@Riverpod(keepAlive: true)
+Future<TrustService> trustService(Ref ref) async {
   final db = await ref.watch(databaseProvider.future);
   return TrustService(db);
-});
+}
 
 /// This is the reactive, in-memory "VIP List" for the whole app.
 ///
 /// It's the "single source of truth" for who we trust.
-final trustListProvider =
-    AsyncNotifierProvider<TrustListNotifier, List<TrustedPeer>>(
-      TrustListNotifier.new,
-    );
-
-class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
+@Riverpod(keepAlive: true)
+class TrustList extends _$TrustList {
   @override
   Future<List<TrustedPeer>> build() async {
-    // Load the initial list of peers from the database
     final trustService = await ref.watch(trustServiceProvider.future);
     return trustService.getTrustedPeers();
   }
@@ -50,14 +46,11 @@ class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
     final trustService = await ref.read(trustServiceProvider.future);
     final peer = TrustedPeer(
       fingerprint: data.fingerprint,
-      name: peerName, // We can get this from the QR or cert
+      name: peerName,
       trustedAt: DateTime.now(),
     );
 
-    // Update the DB
     await trustService.trustPeer(peer);
-
-    // Re-fetch the list from the DB to update our state
     ref.invalidateSelf();
     await future;
   }
@@ -81,11 +74,7 @@ class TrustListNotifier extends AsyncNotifier<List<TrustedPeer>> {
   /// Removes a peer from the database and refreshes the state.
   Future<void> removePeer(String fingerprint) async {
     final trustService = await ref.read(trustServiceProvider.future);
-
-    // Update the DB
     await trustService.untrustPeer(fingerprint);
-
-    // Re-fetch the list from the DB to update our state
     ref.invalidateSelf();
     await future;
   }

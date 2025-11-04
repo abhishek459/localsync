@@ -1,28 +1,28 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:local_sync/features/connection/application/connection_service.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
-import 'package:local_sync/features/identity/domain/device_identity.dart';
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 
-final connectionServiceProvider = Provider<ConnectionService>((ref) {
-  final identityAsync = ref.watch(deviceIdentityProvider);
-  final identity = identityAsync.value;
-  final trustList = ref.watch(trustListProvider).value ?? [];
+part 'connection_providers.g.dart';
+
+@Riverpod(keepAlive: true)
+int connectionPort(Ref ref) {
+  return 45678;
+}
+
+/// Manages the lifecycle of the ConnectionService.
+/// Asynchronously waits for identity and trust list to be ready.
+@Riverpod(keepAlive: true)
+Future<ConnectionService> connectionService(Ref ref) async {
+  // Await both critical dependencies
+  final identity = await ref.watch(deviceIdentityProvider.future);
+  final trustList = await ref.watch(trustListProvider.future);
 
   bool isTrusted(String fingerprint) {
     return trustList.any((peer) => peer.fingerprint == fingerprint);
   }
 
-  if (identity == null ||
-      identity.fingerprint.isEmpty ||
-      identity.certificate == null ||
-      identity.privateKeyPem == null) {
-    return ConnectionService(
-      identity: DeviceIdentity.empty,
-      isTrusted: (fp) => false,
-    );
-  }
-
+  // Identity and trustList are guaranteed to be ready here.
   final service = ConnectionService(identity: identity, isTrusted: isTrusted);
 
   service.startServer();
@@ -32,8 +32,4 @@ final connectionServiceProvider = Provider<ConnectionService>((ref) {
   });
 
   return service;
-});
-
-final connectionPortProvider = Provider<int>((ref) {
-  return 45678;
-});
+}

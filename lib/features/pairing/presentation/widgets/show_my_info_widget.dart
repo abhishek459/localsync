@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_sync/features/pairing/application/show_my_info_notifier.dart';
+import 'package:local_sync/features/pairing/domain/show_my_info_state.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/show_qr_dialog.dart';
 
