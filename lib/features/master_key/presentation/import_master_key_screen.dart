@@ -1,30 +1,107 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_sync/features/master_key/data/master_key_storer_provider.dart';
 
-class ImportMasterKeyScreen extends StatelessWidget {
+class ImportMasterKeyScreen extends ConsumerStatefulWidget {
   const ImportMasterKeyScreen({super.key});
 
   @override
+  ConsumerState<ImportMasterKeyScreen> createState() =>
+      _ImportMasterKeyScreenState();
+}
+
+class _ImportMasterKeyScreenState extends ConsumerState<ImportMasterKeyScreen> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final storer = ref.watch(masterKeyStorerProvider);
+    final storerNotifier = ref.read(masterKeyStorerProvider.notifier);
+
+    // Listen to the provider for success/error states
+    ref.listen(masterKeyStorerProvider, (prev, next) {
+      if (next is AsyncError) {
+        _showError(next.error.toString());
+      }
+      if (next is AsyncData) {
+        // On success, pop all the way back to the home screen
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(title: const Text('Import Master Key')),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Placeholder for key import UI.',
-                style: TextStyle(color: Colors.grey),
-                textAlign: TextAlign.center,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Import Your Master Key',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Enter your 24-word recovery phrase below to restore access to your Secure Vault.',
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _controller,
+              minLines: 3,
+              maxLines: 5,
+              autocorrect: false,
+              enableSuggestions: false,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                letterSpacing: 1.1,
               ),
-              SizedBox(height: 20),
-              Text(
-                'This screen will soon show a text field for the mnemonic and an "Import" button.',
-                textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                labelText: '24-Word Mnemonic Phrase',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.all(16),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 32),
+            FilledButton(
+              // Disable button when storing
+              onPressed: storer.isLoading
+                  ? null
+                  : () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      storerNotifier.storeMnemonic(_controller.text.trim());
+                    },
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: storer.isLoading
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    )
+                  : const Text('Confirm & Import Key'),
+            ),
+          ],
         ),
       ),
     );

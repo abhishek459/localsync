@@ -6,6 +6,7 @@ import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/presentation/master_key_welcome_screen.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
 import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
+import 'package:local_sync/features/vault/presentation/secure_vault_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
@@ -84,10 +85,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // State variable to prevent opening multiple modals.
   bool _isModalOpen = false;
 
+  int _currentIndex = 0;
+
+  final _screens = [
+    const _PeersTab(), // The original body, refactored below
+    const SecureVaultScreen(), // The screen you want to navigate to
+  ];
+
   @override
   Widget build(BuildContext context) {
     // Watch our identity provider
-    final identityAsync = ref.watch(deviceIdentityProvider);
+    // final identityAsync = ref.watch(deviceIdentityProvider); // No longer needed here
 
     // --- Robust Bridge Listener (Refactored) ---
     ref.listen(pairingRequestProvider, (previous, next) {
@@ -127,7 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('LocalSync'),
+        title: Text(_currentIndex == 0 ? 'LocalSync - Peers' : 'Secure Vault'),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1_outlined),
@@ -138,59 +146,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // --- Identity Card ---
-              Card(
-                elevation: 4,
-                color: Theme.of(context).colorScheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Text(
-                        'MY DEVICE IDENTITY',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 16),
-                      // Use AsyncValue.when for clean loading/error states
-                      identityAsync.when(
-                        data: (identity) => SelectableText(
-                          identity.fingerprint,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
-                        ),
-                        loading: () => const CircularProgressIndicator(),
-                        error: (err, stack) => Text(
-                          'Error loading identity:\n$err',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // --- Discovered Peers List ---
-              Text(
-                'DISCOVERED PEERS',
-                style: Theme.of(context).textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Expanded(child: PeerListView()),
-            ],
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.hub_outlined),
+            activeIcon: Icon(Icons.hub),
+            label: 'Peers',
           ),
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.lock_outline),
+            activeIcon: Icon(Icons.lock),
+            label: 'Secure Vault',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeersTab extends ConsumerWidget {
+  const _PeersTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final identityAsync = ref.watch(deviceIdentityProvider);
+
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // --- Identity Card ---
+          Card(
+            elevation: 4,
+            color: Theme.of(context).colorScheme.surface,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Text(
+                    'MY DEVICE IDENTITY',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  // Use AsyncValue.when for clean loading/error states
+                  identityAsync.when(
+                    data: (identity) => SelectableText(
+                      identity.fingerprint,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                    ),
+                    loading: () => const CircularProgressIndicator(),
+                    error: (err, stack) => Text(
+                      'Error loading identity:\n$err',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'DISCOVERED PEERS',
+            style: Theme.of(context).textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          const Expanded(child: PeerListView()),
+        ],
       ),
     );
   }
