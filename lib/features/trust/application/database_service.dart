@@ -73,6 +73,18 @@ class DatabaseService {
       );
     ''');
 
+    // --- NEW TABLE for Secure Vault ---
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS secure_vault (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        nonce BLOB NOT NULL,
+        mac BLOB NOT NULL,
+        ciphertext_path TEXT NOT NULL,
+        added_at INTEGER NOT NULL
+      );
+    ''');
+
     // --- FUTURE-PROOFING ---
     // We create these tables now so our schema is ready for future features.
 

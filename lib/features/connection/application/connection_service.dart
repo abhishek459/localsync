@@ -1,23 +1,31 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:basic_utils/basic_utils.dart';
 import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
 import 'package:local_sync/features/identity/domain/device_identity.dart';
+import 'package:local_sync/features/transport/message_router.dart';
 
 typedef TrustValidator = bool Function(String fingerprint);
 
 class ConnectionService {
   final DeviceIdentity _identity;
   final TrustValidator _isTrusted;
+  final MessageRouter _messageRouter;
   SecureServerSocket? _server;
   final SecurityContext _securityContext;
+
+  /// A map of all active, trusted sockets, keyed by their device fingerprint.
+  final Map<String, SecureSocket> _activeSockets = {};
 
   ConnectionService({
     required DeviceIdentity identity,
     required TrustValidator isTrusted,
+    required MessageRouter messageRouter,
   }) : _identity = identity,
        _isTrusted = isTrusted,
+       _messageRouter = messageRouter,
        _securityContext = SecurityContext() {
     _securityContext.useCertificateChainBytes(
       Uint8List.fromList(utf8.encode(_identity.certificate!.plain!)),
@@ -30,7 +38,7 @@ class ConnectionService {
   String _getFingerprintFromCert(X509Certificate cert) {
     final pem = cert.pem;
     final certData = X509Utils.x509CertificateFromPem(pem);
-    return certData.sha256Thumbprint!;
+    return certData.sha256Thumbprint!.replaceAll(':', '').toLowerCase();
   }
 
   Future<void> startServer() async {
@@ -47,48 +55,49 @@ class ConnectionService {
         requestClientCertificate: true,
       );
 
-      _server?.listen(
-        (SecureSocket socket) {
-          final peerCert = socket.peerCertificate;
-          if (peerCert == null) {
-            socket.destroy();
-            return;
-          }
+      _server?.listen((SecureSocket socket) {
+        final peerCert = socket.peerCertificate;
+        if (peerCert == null) {
+          socket.destroy();
+          return;
+        }
 
-          final fingerprint = _getFingerprintFromCert(peerCert);
-          if (_isTrusted(fingerprint)) {
-            _handleConnection(socket, fingerprint);
-          } else {
-            socket.destroy();
-          }
-        },
-        onError: (error) {
-          // Handle server listen error
-        },
-      );
+        final fingerprint = _getFingerprintFromCert(peerCert);
+        if (_isTrusted(fingerprint)) {
+          _handleConnection(socket, fingerprint);
+        } else {
+          socket.destroy();
+        }
+      }, onError: (error) {});
     } catch (e) {
-      // Handle server start error
+      // Failed to start server
     }
   }
 
   /// Handles an established, trusted connection using the stream API.
   void _handleConnection(SecureSocket socket, String fingerprint) {
+    _activeSockets[fingerprint] = socket;
+
     socket.listen(
       (List<int> data) {
-        final message = String.fromCharCodes(data);
-        // Handle incoming data
-        socket.write('Server acknowledges: $message');
+        _messageRouter.handleData(Uint8List.fromList(data), fingerprint);
       },
       onError: (dynamic error) {
-        // Handle connection error
+        socket.destroy();
+        _activeSockets.remove(fingerprint);
       },
       onDone: () {
-        // Handle connection closed
+        socket.destroy();
+        _activeSockets.remove(fingerprint);
       },
     );
   }
 
   Future<void> connectToPeer(DiscoveredPeer peer) async {
+    if (_activeSockets.containsKey(peer.id)) {
+      return;
+    }
+
     try {
       final socket = await SecureSocket.connect(
         peer.host,
@@ -100,30 +109,59 @@ class ConnectionService {
         },
       );
 
-      // We can get the fingerprint again just to be sure
-      _getFingerprintFromCert(socket.peerCertificate!);
+      final fingerprint = _getFingerprintFromCert(socket.peerCertificate!);
+      _activeSockets[fingerprint] = socket;
 
-      socket.write('Hello from ${_identity.fingerprint}!');
-
-      /// Listen to the socket stream for data, errors, and closure.
       socket.listen(
         (List<int> data) {
-          // Handle incoming data from server
+          _messageRouter.handleData(Uint8List.fromList(data), fingerprint);
         },
         onError: (dynamic error) {
-          // Handle client error
+          socket.destroy();
+          _activeSockets.remove(fingerprint);
         },
         onDone: () {
-          // Handle client disconnected
+          socket.destroy();
+          _activeSockets.remove(fingerprint);
         },
       );
     } catch (e) {
-      // Handle connection error
+      // Failed to connect
+    }
+  }
+
+  /// Sends a raw byte payload to all connected and trusted peers.
+  Future<void> broadcast(Uint8List data) async {
+    if (_activeSockets.isEmpty) {
+      return;
+    }
+
+    final List<String> disconnectedPeers = [];
+
+    for (final entry in _activeSockets.entries) {
+      final fingerprint = entry.key;
+      final socket = entry.value;
+
+      try {
+        socket.add(data);
+        await socket.flush();
+      } catch (e) {
+        disconnectedPeers.add(fingerprint);
+      }
+    }
+
+    for (final fingerprint in disconnectedPeers) {
+      _activeSockets[fingerprint]?.destroy();
+      _activeSockets.remove(fingerprint);
     }
   }
 
   void dispose() {
     _server?.close();
     _server = null;
+    for (final socket in _activeSockets.values) {
+      socket.destroy();
+    }
+    _activeSockets.clear();
   }
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/discovery/presentation/peer_list_view.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
+import 'package:local_sync/features/master_key/data/master_key_providers.dart';
+import 'package:local_sync/features/master_key/presentation/master_key_welcome_screen.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
 import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
 
@@ -23,10 +25,49 @@ class MyApp extends StatelessWidget {
           primary: Colors.blueAccent,
           secondary: Colors.tealAccent,
           surface: Color(0xFF1E1E1E),
+          surfaceContainerHighest: Color(0xFF3A3A3A),
+          error: Colors.redAccent,
         ),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const AppEntry(),
+    );
+  }
+}
+
+/// AppEntry is now the main entry point.
+/// It watches the masterKeyProvider to decide which screen to show.
+class AppEntry extends ConsumerWidget {
+  const AppEntry({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final masterKeyAsync = ref.watch(masterKeyProvider);
+
+    return masterKeyAsync.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (err, stack) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Fatal Error: Could not load master key.\n$err',
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+      data: (mnemonic) {
+        if (mnemonic == null) {
+          // No key exists, force user to create/import one.
+          return const MasterKeyWelcomeScreen();
+        } else {
+          // Key exists, proceed to the main application.
+          return const HomeScreen();
+        }
+      },
     );
   }
 }
