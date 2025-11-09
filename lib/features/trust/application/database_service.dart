@@ -24,14 +24,14 @@ class DatabaseService {
       await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
     }
 
-    if (Platform.isWindows || Platform.isLinux) {
-      sqlite_open.open.overrideFor(
-        Platform.isWindows
-            ? sqlite_open.OperatingSystem.windows
-            : sqlite_open.OperatingSystem.linux,
-        _openSqlite3,
-      );
-    }
+    // if (Platform.isWindows || Platform.isLinux) {
+    //   sqlite_open.open.overrideFor(
+    //     Platform.isWindows
+    //         ? sqlite_open.OperatingSystem.windows
+    //         : sqlite_open.OperatingSystem.linux,
+    //     _openSqlite3,
+    //   );
+    // }
 
     final dbPath = await _getDatabasePath();
     final db = sqlite3.open(dbPath);

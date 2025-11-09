@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:local_sync/features/connection/data/connection_providers.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
 import 'package:local_sync/features/pairing/domain/show_my_info_state.dart';
@@ -64,6 +66,11 @@ class ShowMyInfo extends _$ShowMyInfo {
     }
 
     state = state.copyWith(status: ShowMyInfoStatus.authenticating);
+
+    if (Platform.isLinux || Platform.isWindows) {
+      state = state.copyWith(status: ShowMyInfoStatus.success);
+      return;
+    }
 
     try {
       final bool canAuth =

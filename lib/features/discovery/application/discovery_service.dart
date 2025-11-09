@@ -87,6 +87,7 @@ class DiscoveryService {
   Future<void> _startDiscovery() async {
     if (_discovery == null) return;
     try {
+      await _discovery!.initialize();
       await _discovery!.start();
     } catch (e) {
       // Log discovery start error
