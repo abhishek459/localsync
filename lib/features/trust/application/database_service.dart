@@ -1,10 +1,10 @@
-import 'dart:ffi';
+// import 'dart:ffi';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:sqlite3/open.dart' as sqlite_open;
+// import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 /// Service to initialize and provide the singleton sqlite3 database.
@@ -49,17 +49,17 @@ class DatabaseService {
 
   // FIX: Helper to load the bundled sqlite3.so/dll on desktop.
   // This uses DynamicLibrary (from dart:ffi).
-  DynamicLibrary _openSqlite3() {
-    if (Platform.isWindows) {
-      return DynamicLibrary.open('sqlite3.dll');
-    }
-    if (Platform.isLinux) {
-      return DynamicLibrary.open('libsqlite3.so.0');
-    }
-    // Other platforms (iOS, macOS, Android) are handled by default
-    // by sqlite3_flutter_libs
-    return DynamicLibrary.process();
-  }
+  // DynamicLibrary _openSqlite3() {
+  //   if (Platform.isWindows) {
+  //     return DynamicLibrary.open('sqlite3.dll');
+  //   }
+  //   if (Platform.isLinux) {
+  //     return DynamicLibrary.open('libsqlite3.so.0');
+  //   }
+  //   // Other platforms (iOS, macOS, Android) are handled by default
+  //   // by sqlite3_flutter_libs
+  //   return DynamicLibrary.process();
+  // }
 
   /// Creates our database schema. This is idempotent and can be run safely
   /// on every app launch.
