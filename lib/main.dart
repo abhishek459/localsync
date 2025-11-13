@@ -6,6 +6,8 @@ import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/presentation/master_key_welcome_screen.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
 import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
+import 'package:local_sync/features/shared/application/app_notification_provider.dart';
+import 'package:local_sync/features/shared/domain/app_notification.dart';
 import 'package:local_sync/features/vault/presentation/secure_vault_screen.dart';
 
 void main() {
@@ -18,6 +20,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'LocalSync',
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -44,6 +47,68 @@ class AppEntry extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final masterKeyAsync = ref.watch(masterKeyProvider);
+
+    ref.listen(appNotificationStreamProvider, (previous, next) {
+      next.whenData((AppNotification notification) {
+        // We have a notification, decide how to show it
+        switch (notification.type) {
+          case NotificationType.toast:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(notification.message),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+            break;
+          case NotificationType.success:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(notification.message),
+                backgroundColor: Colors.green, // Or your theme's success color
+              ),
+            );
+            break;
+          case NotificationType.info:
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(notification.message)));
+            break;
+          case NotificationType.dialog:
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('An Error Occurred'),
+                content: Text(notification.message),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+            break;
+          case NotificationType.critical:
+            debugPrint('CRITICAL ERROR: ${notification.message}');
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Critical Error'),
+                content: Text(
+                  '${notification.message}\nThe app may not function correctly.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+            break;
+        }
+      });
+    });
 
     return masterKeyAsync.when(
       loading: () =>

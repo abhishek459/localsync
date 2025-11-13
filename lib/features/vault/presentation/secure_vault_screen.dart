@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 import 'package:local_sync/features/vault/application/file_picker_service.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
 import 'package:local_sync/features/vault/data/vault_file_sender_provider.dart';
@@ -16,43 +17,35 @@ class SecureVaultScreen extends ConsumerWidget {
 
     ref.listen(vaultFileSenderProvider, (prev, next) {
       if (next is AsyncError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send file: ${next.error}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+        NotificationReporter.reportError(
+          next.error,
+          stack: next.stackTrace,
+          userFriendlyMessage: 'Failed to send file. Please try again.',
         );
       }
       if (prev is AsyncLoading && next is AsyncData) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File added to vault and broadcasted!'),
-            backgroundColor: Colors.green,
-          ),
+        NotificationReporter.reportSuccess(
+          'File added to vault and broadcasted!',
         );
       }
     });
 
     ref.listen(vaultFileDecrypterProvider, (prev, next) {
       if (next is AsyncLoading) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Decrypting and saving...')),
-        );
+        NotificationReporter.reportInfo('Decrypting and saving...');
       }
       if (next is AsyncError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to decrypt file: ${next.error}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+        NotificationReporter.reportError(
+          next.error!,
+          stack: next.stackTrace,
+          userFriendlyMessage: 'Failed to decrypt file. Please try again.',
         );
       }
-      if (prev is AsyncLoading && next is AsyncData<String?>) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('File saved to Downloads! (${next.value})'),
-            backgroundColor: Colors.green,
-          ),
+      if (prev is AsyncLoading &&
+          next is AsyncData<String?> &&
+          next.value != null) {
+        NotificationReporter.reportSuccess(
+          'File saved to Downloads! (${next.value})',
         );
       }
     });
@@ -126,9 +119,7 @@ class SecureVaultScreen extends ConsumerWidget {
                       .sendFile(path, filename);
                 } else {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('File picking canceled')),
-                    );
+                    NotificationReporter.reportInfo('File picking canceled');
                   }
                 }
               },

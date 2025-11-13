@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/data/master_key_storer_provider.dart';
+import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 
 class GenerateMasterKeyScreen extends ConsumerStatefulWidget {
   const GenerateMasterKeyScreen({super.key});
@@ -24,16 +25,6 @@ class _GenerateMasterKeyScreenState
     _mnemonic = ref.read(masterKeyServiceProvider).generateMnemonic();
   }
 
-  void _showError(BuildContext context, String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -43,7 +34,7 @@ class _GenerateMasterKeyScreenState
     // Listen to the storer provider for error/success states
     ref.listen(masterKeyStorerProvider, (prev, next) {
       if (next is AsyncError) {
-        _showError(context, next.error.toString());
+        NotificationReporter.reportError(next.error, stack: next.stackTrace);
       }
       if (next is AsyncData) {
         // On success, pop all the way back to the home screen

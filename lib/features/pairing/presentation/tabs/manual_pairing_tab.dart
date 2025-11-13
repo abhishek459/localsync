@@ -5,6 +5,7 @@ import 'package:local_sync/features/connection/data/connection_providers.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/ip_address_input_widget.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/show_my_info_widget.dart';
+import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 
 class ManualPairingTab extends ConsumerStatefulWidget {
@@ -36,11 +37,8 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
   Future<void> _onTrustAndConnect() async {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid || _ipAddress == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please correct the errors in the form.'),
-          backgroundColor: Colors.red,
-        ),
+      NotificationReporter.reportMessage(
+        'Please correct the errors in the form.',
       );
       return;
     }
@@ -57,21 +55,13 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
           .addPeerFromPairingData(pairingData, 'Manually Added Peer');
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Peer trusted! You can now connect.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      NotificationReporter.reportSuccess('Peer trusted! You can now connect.');
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to add peer: $e'),
-          backgroundColor: Colors.red,
-        ),
+      NotificationReporter.reportError(
+        e,
+        userFriendlyMessage: 'Failed to add peer.',
       );
     }
   }

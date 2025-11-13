@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/scanner_overlay.dart';
+import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -34,8 +35,7 @@ class _QrScannerTabState extends ConsumerState<QrScannerTab> {
     final barcode = capture.barcodes.first;
 
     if (barcode.rawValue == null) {
-      _showError('Scanned QR code is empty.');
-      // Allow scanning again
+      NotificationReporter.reportMessage('Scanned QR code is empty.');
       setState(() => _isProcessing = false);
       return;
     }
@@ -91,31 +91,24 @@ class _QrScannerTabState extends ConsumerState<QrScannerTab> {
             .addPeerFromPairingData(pairingData, 'Scanned Peer');
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Peer trusted! You can now connect.'),
-              backgroundColor: Colors.green,
-            ),
+          NotificationReporter.reportSuccess(
+            'Peer trusted! You can now connect.',
           );
           // Pop the whole pairing screen
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }
     } catch (e) {
-      _showError('Invalid QR code format. $e');
+      NotificationReporter.reportError(
+        e,
+        userFriendlyMessage: 'Invalid QR code format.',
+      );
     }
 
     // Finished processing, allow scanning again
     if (mounted) {
       setState(() => _isProcessing = false);
     }
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
   }
 
   @override
