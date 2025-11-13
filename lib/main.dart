@@ -8,6 +8,7 @@ import 'package:local_sync/features/pairing/data/pairing_providers.dart';
 import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 import 'package:local_sync/features/shared/domain/app_notification.dart';
+import 'package:local_sync/features/shared/presentation/app_theme.dart';
 import 'package:local_sync/features/vault/presentation/secure_vault_screen.dart';
 
 void main() {
@@ -22,18 +23,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'LocalSync',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: Colors.blueAccent,
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.blueAccent,
-          secondary: Colors.tealAccent,
-          surface: Color(0xFF1E1E1E),
-          surfaceContainerHighest: Color(0xFF3A3A3A),
-          error: Colors.redAccent,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       home: const AppEntry(),
     );
   }
