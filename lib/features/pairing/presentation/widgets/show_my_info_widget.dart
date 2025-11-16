@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/pairing/domain/show_my_info_state.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
-import 'package:local_sync/features/pairing/presentation/widgets/show_qr_dialog.dart';
+import 'package:local_sync/features/pairing/presentation/widgets/display_pairing_info.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 
 class ShowMyInfoWidget extends ConsumerWidget {
   const ShowMyInfoWidget({super.key});
@@ -31,9 +31,9 @@ class ShowMyInfoWidget extends ConsumerWidget {
           children: [
             Text(
               'Error: ${authState.errorMessage}',
-              style: const TextStyle(color: Colors.red),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSizes.p2),
             ElevatedButton(
               onPressed: authNotifier.authenticate,
               child: const Text('Try Again'),
@@ -49,8 +49,11 @@ class ShowMyInfoWidget extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, st) => Column(
             children: [
-              Text('Error: $e', style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 8),
+              Text(
+                'Error: $e',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              const SizedBox(height: AppSizes.p2),
               ElevatedButton(
                 onPressed: () => ref.invalidate(myPairingDataProvider),
                 child: const Text('Retry Data Fetch'),
@@ -59,70 +62,9 @@ class ShowMyInfoWidget extends ConsumerWidget {
           ),
           data: (pairingData) {
             // Both auth and data are successful.
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Your Connection Info',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 16),
-                _buildInfoRow(context, 'Wi-Fi IP Address:', pairingData.ip),
-                const SizedBox(height: 12),
-                _buildInfoRow(context, 'Port:', pairingData.port.toString()),
-                const SizedBox(height: 12),
-                _buildInfoRow(
-                  context,
-                  'Device Fingerprint:',
-                  pairingData.fingerprint,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.qr_code_2),
-                  label: const Text('Show QR Code to Scan'),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) =>
-                          ShowMyQrDialog(pairingData: pairingData),
-                    );
-                  },
-                ),
-              ],
-            );
+            return DisplayPairingInfo(pairingData: pairingData);
           },
         );
     }
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelLarge),
-        Row(
-          children: [
-            Expanded(
-              child: SelectableText(
-                value,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.copy, size: 16),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: value));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Copied to clipboard'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }

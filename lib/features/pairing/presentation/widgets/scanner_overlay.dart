@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 
 /// A simple overlay with a "scan window" to guide the user.
 class ScannerOverlay extends StatelessWidget {
@@ -22,7 +23,7 @@ class ScannerOverlay extends StatelessWidget {
               width: scanWindowSize,
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppSizes.borderRadius),
               ),
             ),
           ),

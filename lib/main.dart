@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/discovery/presentation/peer_list_view.dart';
@@ -5,9 +7,12 @@ import 'package:local_sync/features/identity/data/identity_providers.dart';
 import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/presentation/master_key_welcome_screen.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
+import 'package:local_sync/features/pairing/presentation/pairing_dialog_layout.dart';
 import 'package:local_sync/features/pairing/presentation/pairing_screen.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
 import 'package:local_sync/features/shared/domain/app_notification.dart';
+import 'package:local_sync/features/shared/presentation/adaptive_scaffold.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/shared/presentation/app_theme.dart';
 import 'package:local_sync/features/vault/presentation/secure_vault_screen.dart';
 
@@ -47,23 +52,43 @@ class AppEntry extends ConsumerWidget {
           case NotificationType.toast:
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(notification.message),
-                backgroundColor: Theme.of(context).colorScheme.error,
+                content: Text(
+                  notification.message,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+                backgroundColor: Theme.of(context).colorScheme.onErrorContainer,
               ),
             );
             break;
           case NotificationType.success:
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(notification.message),
-                backgroundColor: Colors.green, // Or your theme's success color
+                content: Text(
+                  notification.message,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
               ),
             );
             break;
           case NotificationType.info:
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(notification.message)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  notification.message,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
+              ),
+            );
             break;
           case NotificationType.dialog:
             showDialog(
@@ -108,10 +133,10 @@ class AppEntry extends ConsumerWidget {
       error: (err, stack) => Scaffold(
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(AppSizes.p4),
             child: Text(
               'Fatal Error: Could not load master key.\n$err',
-              style: const TextStyle(color: Colors.red),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
               textAlign: TextAlign.center,
             ),
           ),
@@ -144,16 +169,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   int _currentIndex = 0;
 
-  final _screens = [
+  final _pages = [
     const _PeersTab(), // The original body, refactored below
     const SecureVaultScreen(), // The screen you want to navigate to
+  ];
+
+  final _destinations = [
+    const AdaptiveDestination(
+      icon: Icons.hub_outlined,
+      selectedIcon: Icons.hub,
+      label: 'Peers',
+    ),
+    const AdaptiveDestination(
+      icon: Icons.lock_outline,
+      selectedIcon: Icons.lock,
+      label: 'Secure Vault',
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     // Watch our identity provider
-    // final identityAsync = ref.watch(deviceIdentityProvider); // No longer needed here
-
+    final bool isDesktop = !Platform.isAndroid && !Platform.isIOS;
     // --- Robust Bridge Listener (Refactored) ---
     ref.listen(pairingRequestProvider, (previous, next) {
       // If a request is made (next == true) AND the modal isn't already open
@@ -162,35 +199,59 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() {
           _isModalOpen = true;
         });
-
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true, // Required for fractional height
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          clipBehavior: Clip.antiAliasWithSaveLayer,
-          builder: (context) {
-            // Use FractionallySizedBox to control the height
-            return const FractionallySizedBox(
-              heightFactor: 0.85, // Replaces the old heightFactor parameter
-              child: PairingScreen(),
-            );
-          },
-        ).whenComplete(() {
-          // When the sheet is dismissed (for any reason), update our state.
-          setState(() {
-            _isModalOpen = false;
+        if (isDesktop) {
+          // --- DESKTOP DIALOG ---
+          showDialog(
+            context: context,
+            barrierDismissible: false, // Make it modal
+            builder: (context) {
+              return const Dialog(
+                clipBehavior: Clip.antiAlias,
+                // Constrain the size of our new desktop layout
+                child: SizedBox(
+                  width: 800,
+                  height: 550,
+                  child: PairingDialogLayout(),
+                ),
+              );
+            },
+          ).whenComplete(() {
+            // When the dialog is dismissed, update our state.
+            setState(() {
+              _isModalOpen = false;
+            });
+            // We must also consume the request
+            ref.read(pairingRequestProvider.notifier).consume();
           });
-        });
+        } else {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true, // Required for fractional height
+            builder: (context) {
+              // Use FractionallySizedBox to control the height
+              return const FractionallySizedBox(
+                heightFactor: 0.85, // Replaces the old heightFactor parameter
+                child: PairingScreen(),
+              );
+            },
+          ).whenComplete(() {
+            // When the sheet is dismissed (for any reason), update our state.
+            setState(() {
+              _isModalOpen = false;
+            });
+          });
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           ref.read(pairingRequestProvider.notifier).consume();
         });
       }
     });
-
-    return Scaffold(
+    return AdaptiveScaffold(
+      selectedIndex: _currentIndex,
+      onDestinationSelected: (index) => setState(() => _currentIndex = index),
+      destinations: _destinations,
+      pages: _pages,
       appBar: AppBar(
         title: Text(_currentIndex == 0 ? 'LocalSync - Peers' : 'Secure Vault'),
         actions: [
@@ -200,23 +261,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onPressed: () {
               ref.read(pairingRequestProvider.notifier).request();
             },
-          ),
-        ],
-      ),
-      body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.hub_outlined),
-            activeIcon: Icon(Icons.hub),
-            label: 'Peers',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.lock_outline),
-            activeIcon: Icon(Icons.lock),
-            label: 'Secure Vault',
           ),
         ],
       ),
@@ -232,38 +276,37 @@ class _PeersTab extends ConsumerWidget {
     final identityAsync = ref.watch(deviceIdentityProvider);
 
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(AppSizes.p6),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // --- Identity Card ---
           Card(
-            elevation: 4,
-            color: Theme.of(context).colorScheme.surface,
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainer,
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(AppSizes.p4),
               child: Column(
                 children: [
                   Text(
                     'MY DEVICE IDENTITY',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSizes.p4),
                   // Use AsyncValue.when for clean loading/error states
                   identityAsync.when(
                     data: (identity) => SelectableText(
                       identity.fingerprint,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      ),
+                      style: Theme.of(context).textTheme.labelSmall,
                     ),
                     loading: () => const CircularProgressIndicator(),
                     error: (err, stack) => Text(
                       'Error loading identity:\n$err',
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ),
                 ],
@@ -276,7 +319,7 @@ class _PeersTab extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSizes.p4),
           const Expanded(child: PeerListView()),
         ],
       ),

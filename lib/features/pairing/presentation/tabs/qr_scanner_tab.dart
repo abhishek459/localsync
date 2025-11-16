@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/scanner_overlay.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -57,14 +58,14 @@ class _QrScannerTabState extends ConsumerState<QrScannerTab> {
                 'A peer was found. Please verify its fingerprint matches the one shown on the other device.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSizes.p4),
               Text(
                 'PEER FINGERPRINT:',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
               SelectableText(
                 pairingData.fingerprint,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),

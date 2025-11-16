@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/data/master_key_storer_provider.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 
 class GenerateMasterKeyScreen extends ConsumerStatefulWidget {
   const GenerateMasterKeyScreen({super.key});
@@ -46,81 +47,77 @@ class _GenerateMasterKeyScreenState
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Master Key')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Your New Master Key',
-              style: textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Write these 24 words down in a safe place. This is the only way to recover your Secure Vault.',
-              style: textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Card(
-              elevation: 0,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SelectableText(
-                  _mnemonic,
-                  style: textTheme.titleMedium?.copyWith(
-                    fontFamily: 'monospace',
-                    letterSpacing: 1.1,
-                    height: 1.5,
+      body: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: AppSizes.layoutConstraintMedium),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSizes.p6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Your New Master Key',
+                style: textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSizes.p4),
+              Text(
+                'Write these 24 words down in a safe place. This is the only way to recover your Secure Vault.',
+                style: textTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Card(
+                elevation: 0,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SelectableText(
+                    _mnemonic,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      letterSpacing: 1.1,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.copy, size: 16),
-              label: const Text('Copy to Clipboard'),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: _mnemonic));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Copied to clipboard'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            CheckboxListTile(
-              title: const Text('I have written down or saved this phrase'),
-              value: _hasConfirmed,
-              onChanged: (value) {
-                setState(() {
-                  _hasConfirmed = value ?? false;
-                });
-              },
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _hasConfirmed && !storer.isLoading
-                  ? () => storerNotifier.storeMnemonic(_mnemonic)
-                  : null,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+              const SizedBox(height: AppSizes.p4),
+              TextButton.icon(
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Copy to Clipboard'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: _mnemonic));
+                  NotificationReporter.reportInfo('Copied to clipboard');
+                },
               ),
-              child: storer.isLoading
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 3),
-                    )
-                  : const Text('Confirm & Store Key'),
-            ),
-          ],
+              const SizedBox(height: 32),
+              CheckboxListTile(
+                title: const Text('I have saved this phrase'),
+                value: _hasConfirmed,
+                onChanged: (value) {
+                  setState(() {
+                    _hasConfirmed = value ?? false;
+                  });
+                },
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: _hasConfirmed && !storer.isLoading
+                    ? () => storerNotifier.storeMnemonic(_mnemonic)
+                    : null,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: AppSizes.p4),
+                ),
+                child: storer.isLoading
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      )
+                    : const Text('Confirm & Store Key'),
+              ),
+            ],
+          ),
         ),
       ),
     );

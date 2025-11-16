@@ -87,7 +87,13 @@ class PairingScreen extends StatelessWidget {
             ),
           ],
         ),
-        body: ManualPairingTab(),
+        // Center the content and constrain its width for desktop readability
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: const ManualPairingTab(),
+          ),
+        ),
       );
     }
   }

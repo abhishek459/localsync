@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/vault/application/file_picker_service.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
 import 'package:local_sync/features/vault/data/vault_file_sender_provider.dart';
@@ -51,7 +52,6 @@ class SecureVaultScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Secure Vault')),
       body: vaultFilesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(
@@ -62,18 +62,18 @@ class SecureVaultScreen extends ConsumerWidget {
         ),
         data: (files) {
           if (files.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.info_outline, size: 48, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('Your Secure Vault is empty'),
-                  Text(
-                    'Tap the "+" button to add a file.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
+            return ListTile(
+              leading: Icon(
+                Icons.info_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              title: const Text('Your Secure Vault is empty'),
+              subtitle: Text(
+                'Tap the "+" button to add a file.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             );
           }
@@ -85,10 +85,8 @@ class SecureVaultScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final file = files[index];
               return ListTile(
-                leading: const Icon(Icons.lock_outline),
                 title: Text(file.filename),
                 subtitle: Text('Added: ${file.addedAt.toLocal()}'),
-                trailing: const Icon(Icons.download_for_offline_outlined),
                 onTap: isDecrypting
                     ? null
                     : () {

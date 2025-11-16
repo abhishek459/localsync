@@ -42,31 +42,20 @@ abstract final class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-
-      /// This preserves all default sizes, weights, and line heights.
-      textTheme: defaultTextTheme.copyWith(
-        headlineSmall: defaultTextTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-        titleLarge: defaultTextTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-        titleMedium: defaultTextTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      fontFamily: 'SourceSans3',
+      textTheme: defaultTextTheme,
 
       /// Theme for AppBar
       appBarTheme: AppBarTheme(
         elevation: 0.0,
-        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 3,
         backgroundColor: colorScheme.surface,
       ),
 
       /// Theme for TextFields
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest,
+        fillColor: colorScheme.surfaceContainerHigh,
         border: OutlineInputBorder(
           borderRadius: _borderRadius,
           borderSide: BorderSide.none, // Use a clean, borderless look
@@ -102,6 +91,11 @@ abstract final class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: _borderRadius),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: _borderRadius),
         ),
       ),

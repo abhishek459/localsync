@@ -67,7 +67,7 @@ class ShowMyInfo extends _$ShowMyInfo {
 
     state = state.copyWith(status: ShowMyInfoStatus.authenticating);
 
-    if (Platform.isLinux || Platform.isWindows) {
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
       state = state.copyWith(status: ShowMyInfoStatus.success);
       return;
     }

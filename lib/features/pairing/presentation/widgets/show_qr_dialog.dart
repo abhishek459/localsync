@@ -12,31 +12,20 @@ class ShowMyQrDialog extends StatelessWidget {
     // Serialize the data to JSON
     final qrData = pairingData.toJson();
 
-    return AlertDialog(
-      title: const Text('Scan This Code'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('Have your other device scan this code to connect.'),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: 250,
-            height: 250,
-            child: PrettyQrView.data(
-              data: qrData,
-              decoration: PrettyQrDecoration(
-                shape: PrettyQrSquaresSymbol(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 250,
+          height: 250,
+          child: PrettyQrView.data(
+            data: qrData,
+            decoration: PrettyQrDecoration(
+              shape: PrettyQrSquaresSymbol(
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
         ),
       ],
     );

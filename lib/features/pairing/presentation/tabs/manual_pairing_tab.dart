@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/ip_address_input_widget.dart';
 import 'package:local_sync/features/pairing/presentation/widgets/show_my_info_widget.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 
 class ManualPairingTab extends ConsumerStatefulWidget {
@@ -68,26 +71,28 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = !Platform.isAndroid && !Platform.isIOS;
+
     return Form(
       key: _formKey,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSizes.p4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const ShowMyInfoWidget(),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 16),
+            if (!isDesktop) const ShowMyInfoWidget(),
+            if (!isDesktop) const SizedBox(height: AppSizes.p4),
+            if (!isDesktop) const Divider(),
+            if (!isDesktop) const SizedBox(height: AppSizes.p4),
             Text(
               'Connect to Peer',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSizes.p2),
             const Text(
               'Enter the IP, Port, and Fingerprint shown on your other device.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSizes.p4),
             IpAddressInputWidget(
               onChanged: (String? ip) {
                 setState(() {
@@ -95,15 +100,12 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
                 });
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSizes.p4),
             TextFormField(
               controller: _portController,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Port',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Port'),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Port is required';
@@ -115,14 +117,13 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSizes.p4),
             TextFormField(
               controller: _fingerprintController,
               decoration: const InputDecoration(
                 labelText: 'Device Fingerprint',
-                border: OutlineInputBorder(),
               ),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              style: Theme.of(context).textTheme.bodySmall,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Fingerprint is required';
@@ -137,7 +138,7 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
             FilledButton(
               onPressed: _onTrustAndConnect,
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: AppSizes.p4),
               ),
               child: const Text('Trust & Add Device'),
             ),

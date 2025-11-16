@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 
 /// A widget that provides 4 text fields for entering an IP address.
 ///
@@ -143,39 +144,28 @@ class _IpAddressInputWidgetState extends State<IpAddressInputWidget> {
 
   Widget _buildDot() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(
-        '.',
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSizes.p2),
+      child: Text('.', style: Theme.of(context).textTheme.headlineSmall),
     );
   }
 
   Widget _buildOctetField(int index) {
-    return SizedBox(
-      width: 60, // Fixed width for each octet field
+    return Flexible(
       child: TextField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        style: Theme.of(context).textTheme.titleMedium,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(3),
           IpOctetInputFormatter(), // Custom formatter for 0-255
         ],
         decoration: InputDecoration(
-          border: const OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-          ),
           contentPadding: const EdgeInsets.symmetric(
-            vertical: 12,
-            horizontal: 8,
+            vertical: AppSizes.p4,
+            horizontal: AppSizes.p2,
           ),
           isDense: true,
         ),
