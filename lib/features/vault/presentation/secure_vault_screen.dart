@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/shared/application/app_notification_provider.dart';
-import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/vault/application/file_picker_service.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
 import 'package:local_sync/features/vault/data/vault_file_sender_provider.dart';
