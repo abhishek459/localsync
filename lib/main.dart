@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_sync/features/connection/application/auto_connection_manager.dart';
 import 'package:local_sync/features/discovery/presentation/peer_list_view.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
 import 'package:local_sync/features/master_key/data/master_key_providers.dart';
@@ -189,7 +190,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch our identity provider
+    ref.watch(autoConnectionManagerProvider);
     final bool isDesktop = !Platform.isAndroid && !Platform.isIOS;
     // --- Robust Bridge Listener (Refactored) ---
     ref.listen(pairingRequestProvider, (previous, next) {

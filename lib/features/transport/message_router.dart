@@ -42,6 +42,10 @@ class MessageRouter {
       case MessageType.syncFile:
         // TODO: Handle sync file in Phase 3
         break;
+      case MessageType.auth:
+        // Auth packets are handled by the ConnectionService during the handshake.
+        // If one reaches here, it's either a duplicate or out of order. Safe to ignore.
+        break;
       case MessageType.unknown:
         // Unknown message type, ignore
         break;

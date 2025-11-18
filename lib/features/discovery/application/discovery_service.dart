@@ -39,12 +39,12 @@ class DiscoveryService {
         name: deviceName, // e.g., "My Pixel 8"
         type: _serviceType,
         port: _port,
-        // We put our unique, permanent ID in the TXT record.
-        // This is how peers will identify us.
         attributes: {'id': _identity.fingerprint},
       );
 
       _broadcast = BonsoirBroadcast(service: service);
+
+      await _broadcast!.initialize();
       await _broadcast!.start();
     } catch (e) {
       // Log broadcast start error
@@ -64,33 +64,28 @@ class DiscoveryService {
       return _peersController.stream;
     }
 
-    try {
-      _discovery = BonsoirDiscovery(type: _serviceType);
-
-      // Start listening *before* starting the discovery.
-      _discoverySubscription = _discovery!.eventStream!.listen(
-        _handleDiscoveryEvent,
-      );
-
-      // Asynchronously start the discovery.
-      // We don't await this; we let it run in the background.
-      _startDiscovery();
-    } catch (e) {
-      // Handle discovery start error
-      _peersController.addError(e);
-    }
+    _initializeAndStartDiscovery();
 
     return _peersController.stream;
   }
 
-  // Helper to wait for the discovery to be ready and start it.
-  Future<void> _startDiscovery() async {
-    if (_discovery == null) return;
+  Future<void> _initializeAndStartDiscovery() async {
     try {
+      _discovery = BonsoirDiscovery(type: _serviceType);
+
       await _discovery!.initialize();
+
+      if (_discovery!.eventStream == null) {
+        return;
+      }
+
+      _discoverySubscription = _discovery!.eventStream!.listen(
+        _handleDiscoveryEvent,
+      );
+
       await _discovery!.start();
     } catch (e) {
-      // Log discovery start error
+      _discovery = null;
       _peersController.addError(e);
     }
   }
@@ -121,19 +116,14 @@ class DiscoveryService {
     }
   }
 
-  /// This is the new, correct method for bonsoir: ^6.0.1
   void _addOrUpdatePeer(BonsoirService service) {
-    // The BonsoirService now contains host, port, and attributes
-    // *after* it has been resolved.
     final host = service.host;
     final id = service.attributes['id'];
 
-    // We MUST have a host and an ID to continue.
     if (host == null || id == null) {
       return;
     }
 
-    // Filter out our own device
     if (id == _identity.fingerprint) {
       return;
     }
@@ -156,7 +146,6 @@ class DiscoveryService {
   }
 
   /// Helper to get a platform-specific device name.
-  /// This code is compatible with device_info_plus: ^12.x.x
   Future<String> _getDeviceName() async {
     try {
       if (Platform.isAndroid) {

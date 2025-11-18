@@ -17,11 +17,11 @@ int connectionPort(Ref ref) {
 Future<ConnectionService> connectionService(Ref ref) async {
   // Await all critical dependencies
   final identity = await ref.watch(deviceIdentityProvider.future);
-  final trustList = await ref.watch(trustListProvider.future);
   final messageRouter = await ref.watch(messageRouterProvider.future);
 
   bool isTrusted(String fingerprint) {
-    return trustList.any((peer) => peer.fingerprint == fingerprint);
+    final list = ref.read(trustListProvider).value ?? [];
+    return list.any((peer) => peer.fingerprint == fingerprint);
   }
 
   // Identity, trustList, and router are guaranteed to be ready here.

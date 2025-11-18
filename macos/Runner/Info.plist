@@ -28,7 +28,13 @@
 		<string>MainMenu</string>
 		<key>NSPrincipalClass</key>
 		<string>NSApplication</string>
+		<key>NSLocalNetworkUsageDescription</key>
+		<string>LocalSync needs to connect to other devices on your local network to sync files.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>This app needs access to the camera to scan codes.</string>
+		<key>NSBonjourServices</key>
+		<array>
+			<string>_localsync._tcp</string>
+		</array>
 	</dict>
 </plist>

@@ -28,7 +28,10 @@ enum MessageType {
   vaultFile(0x01),
 
   /// (0x02) A file for the P2P Synced Folder.
-  syncFile(0x02);
+  syncFile(0x02),
+
+  /// (0x03) Authentication packet (Certificate exchange).
+  auth(0x03);
 
   const MessageType(this.value);
   final int value;

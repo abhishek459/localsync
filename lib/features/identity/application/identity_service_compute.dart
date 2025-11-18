@@ -107,5 +107,6 @@ String _computeGenerateSelfSignedCertPem(
     issuer: issuer,
     notBefore: validFrom,
     serialNumber: serialNumber,
+    cA: true,
   );
 }
