@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -9,52 +10,79 @@ import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 part 'encryption_service.g.dart';
 
 /// Provides high-level methods for encrypting and decrypting files
-/// for the Secure Vault.
+/// for the Secure Vault using background isolates to prevent UI blocking.
 class EncryptionService {
-  final SecretKey _vaultKey;
-  final _algorithm = AesGcm.with256bits();
+  // We store the raw bytes because we need to send them to the Isolate.
+  // Complex objects like SecretKey might not be sendable depending on implementation.
+  final List<int> _keyBytes;
 
-  EncryptionService(this._vaultKey);
+  EncryptionService(this._keyBytes);
 
-  /// Encrypts a file at the given [filePath].
+  /// Encrypts a file at the given [filePath] in a background isolate.
   ///
-  /// This reads the file, generates a new random 12-byte nonce,
-  /// and encrypts the content using AES-256-GCM.
+  /// 1. Spawns an isolate.
+  /// 2. Reads the file inside the isolate (preventing I/O jank).
+  /// 3. Encrypts content using AES-256-GCM.
+  /// 4. Returns the result to the main thread.
   Future<EncryptedFile> encryptFile(String filePath) async {
-    final fileBytes = await File(filePath).readAsBytes();
-    final nonce = _algorithm.newNonce();
+    // Capture the key bytes to pass to the isolate closure
+    final keyBytes = _keyBytes;
 
-    final secretBox = await _algorithm.encrypt(
-      fileBytes,
-      secretKey: _vaultKey,
-      nonce: nonce,
-    );
+    return await Isolate.run(() async {
+      // --- Everything here runs on a background thread ---
 
-    return EncryptedFile(
-      nonce: secretBox.nonce,
-      mac: secretBox.mac.bytes,
-      ciphertext: Uint8List.fromList(secretBox.cipherText),
-    );
+      // 1. Perform File I/O in the isolate
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        throw FileSystemException("File not found", filePath);
+      }
+      final fileBytes = await file.readAsBytes();
+
+      // 2. Setup Algo
+      final algorithm = AesGcm.with256bits();
+      final secretKey = SecretKey(keyBytes);
+      final nonce = algorithm.newNonce();
+
+      // 3. Encrypt
+      final secretBox = await algorithm.encrypt(
+        fileBytes,
+        secretKey: secretKey,
+        nonce: nonce,
+      );
+
+      // 4. Return the result
+      // EncryptedFile must be a simple data class (sendable)
+      return EncryptedFile(
+        nonce: secretBox.nonce,
+        mac: secretBox.mac.bytes,
+        ciphertext: Uint8List.fromList(secretBox.cipherText),
+      );
+    });
   }
 
-  /// Decrypts a [EncryptedFile] object.
-  ///
-  /// This re-combines the ciphertext, nonce, and MAC into a [SecretBox]
-  /// and attempts to decrypt it with the vault key. It will throw an
-  /// error if the key is incorrect or the data has been tampered with.
+  /// Decrypts a [EncryptedFile] object in a background isolate.
   Future<Uint8List> decryptFile(EncryptedFile encryptedFile) async {
-    final secretBox = SecretBox(
-      encryptedFile.ciphertext,
-      nonce: encryptedFile.nonce,
-      mac: Mac(encryptedFile.mac),
-    );
+    final keyBytes = _keyBytes;
 
-    final decryptedBytes = await _algorithm.decrypt(
-      secretBox,
-      secretKey: _vaultKey,
-    );
+    return await Isolate.run(() async {
+      // --- Everything here runs on a background thread ---
 
-    return Uint8List.fromList(decryptedBytes);
+      final algorithm = AesGcm.with256bits();
+      final secretKey = SecretKey(keyBytes);
+
+      final secretBox = SecretBox(
+        encryptedFile.ciphertext,
+        nonce: encryptedFile.nonce,
+        mac: Mac(encryptedFile.mac),
+      );
+
+      final decryptedBytes = await algorithm.decrypt(
+        secretBox,
+        secretKey: secretKey,
+      );
+
+      return Uint8List.fromList(decryptedBytes);
+    });
   }
 }
 
@@ -63,11 +91,11 @@ class EncryptionService {
 @riverpod
 Future<EncryptionService> encryptionService(Ref ref) async {
   // 1. Get the 32-byte AES key derived from the master key.
+  // We assume this provider returns a List<int> or Uint8List.
   final vaultKey = await ref.watch(vaultAesKeyProvider.future);
 
-  // 2. Create the SecretKey object required by the cryptography package.
-  final secretKey = SecretKey(vaultKey);
-
-  // 3. Return the service instance.
-  return EncryptionService(secretKey);
+  // 2. Pass the raw bytes to the service.
+  // We do NOT create the SecretKey object here anymore, as we need
+  // the raw bytes to pass into the Isolate.
+  return EncryptionService(vaultKey);
 }
