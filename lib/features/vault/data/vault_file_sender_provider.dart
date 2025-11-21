@@ -47,6 +47,13 @@ class VaultFileSender extends _$VaultFileSender {
 
       final fullPayload = builder.toBytes();
 
+      final frameBuilder = BytesBuilder();
+      final lengthData = ByteData(4)..setUint32(0, fullPayload.length);
+      frameBuilder.add(lengthData.buffer.asUint8List());
+      frameBuilder.add(fullPayload);
+
+      final framedPayload = frameBuilder.toBytes();
+
       // 1. Save to local repository *first*
       await repository.addFile(
         id: fileId,
@@ -60,7 +67,7 @@ class VaultFileSender extends _$VaultFileSender {
       ref.invalidate(vaultFilesProvider);
 
       // 3. Broadcast to peers
-      await connectionService.broadcast(fullPayload);
+      await connectionService.broadcast(framedPayload);
     });
   }
 }

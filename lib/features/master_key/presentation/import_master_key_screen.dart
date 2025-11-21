@@ -40,9 +40,11 @@ class _ImportMasterKeyScreenState extends ConsumerState<ImportMasterKeyScreen> {
       }
       if (next is AsyncData) {
         // On success, pop all the way back to the home screen
-        if (mounted) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        });
       }
     });
 

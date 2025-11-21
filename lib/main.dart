@@ -37,8 +37,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// AppEntry is now the main entry point.
-/// It watches the masterKeyProvider to decide which screen to show.
 class AppEntry extends ConsumerWidget {
   const AppEntry({super.key});
 
@@ -46,9 +44,21 @@ class AppEntry extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final masterKeyAsync = ref.watch(masterKeyProvider);
 
+    // PRODUCTION READY FIX:
+    // We use ref.listen for side effects.
     ref.listen(appNotificationStreamProvider, (previous, next) {
-      next.whenData((AppNotification notification) {
-        // We have a notification, decide how to show it
+      // 1. Check if we have valid data to act on
+      if (!next.hasValue || next.hasError || next.isLoading) return;
+
+      final notification = next.value!;
+
+      // 2. Schedule UI work for *after* the current frame is painted.
+      // This guarantees the context is mounted and valid, and avoids
+      // "setState called during build" errors.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // 3. Always check mounted before acting on context asynchronously
+        if (!context.mounted) return;
+
         switch (notification.type) {
           case NotificationType.toast:
             ScaffoldMessenger.of(context).showSnackBar(
@@ -145,10 +155,8 @@ class AppEntry extends ConsumerWidget {
       ),
       data: (mnemonic) {
         if (mnemonic == null) {
-          // No key exists, force user to create/import one.
           return const MasterKeyWelcomeScreen();
         } else {
-          // Key exists, proceed to the main application.
           return const HomeScreen();
         }
       },
@@ -156,7 +164,6 @@ class AppEntry extends ConsumerWidget {
   }
 }
 
-// Converted to ConsumerStatefulWidget to manage the _isModalOpen state.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -165,15 +172,10 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // State variable to prevent opening multiple modals.
   bool _isModalOpen = false;
-
   int _currentIndex = 0;
 
-  final _pages = [
-    const _PeersTab(), // The original body, refactored below
-    const SecureVaultScreen(), // The screen you want to navigate to
-  ];
+  final _pages = [const _PeersTab(), const SecureVaultScreen()];
 
   final _destinations = [
     const AdaptiveDestination(
@@ -190,64 +192,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Initialize the manager (which now sets up listeners once)
     ref.watch(autoConnectionManagerProvider);
-    final bool isDesktop = !Platform.isAndroid && !Platform.isIOS;
-    // --- Robust Bridge Listener (Refactored) ---
-    ref.listen(pairingRequestProvider, (previous, next) {
-      // If a request is made (next == true) AND the modal isn't already open
-      if (next == true && !_isModalOpen) {
-        // Set state to true immediately to block concurrent requests
-        setState(() {
-          _isModalOpen = true;
-        });
-        if (isDesktop) {
-          // --- DESKTOP DIALOG ---
-          showDialog(
-            context: context,
-            barrierDismissible: false, // Make it modal
-            builder: (context) {
-              return const Dialog(
-                clipBehavior: Clip.antiAlias,
-                // Constrain the size of our new desktop layout
-                child: SizedBox(
-                  width: 800,
-                  height: 550,
-                  child: PairingDialogLayout(),
-                ),
-              );
-            },
-          ).whenComplete(() {
-            // When the dialog is dismissed, update our state.
-            setState(() {
-              _isModalOpen = false;
-            });
-            // We must also consume the request
-            ref.read(pairingRequestProvider.notifier).consume();
-          });
-        } else {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true, // Required for fractional height
-            builder: (context) {
-              // Use FractionallySizedBox to control the height
-              return const FractionallySizedBox(
-                heightFactor: 0.85, // Replaces the old heightFactor parameter
-                child: PairingScreen(),
-              );
-            },
-          ).whenComplete(() {
-            // When the sheet is dismissed (for any reason), update our state.
-            setState(() {
-              _isModalOpen = false;
-            });
-          });
-        }
 
+    final bool isDesktop = !Platform.isAndroid && !Platform.isIOS;
+
+    ref.listen(pairingRequestProvider, (previous, next) {
+      if (next == true && !_isModalOpen) {
+        setState(() => _isModalOpen = true);
+
+        // Using postFrameCallback here as well ensures the modal transition
+        // starts cleanly after the current build cycle.
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(pairingRequestProvider.notifier).consume();
+          if (!mounted) return;
+
+          if (isDesktop) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) {
+                return const Dialog(
+                  clipBehavior: Clip.antiAlias,
+                  child: SizedBox(
+                    width: 800,
+                    height: 550,
+                    child: PairingDialogLayout(),
+                  ),
+                );
+              },
+            ).whenComplete(() {
+              if (mounted) {
+                setState(() => _isModalOpen = false);
+                ref.read(pairingRequestProvider.notifier).consume();
+              }
+            });
+          } else {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (context) {
+                return const FractionallySizedBox(
+                  heightFactor: 0.85,
+                  child: PairingScreen(),
+                );
+              },
+            ).whenComplete(() {
+              if (mounted) {
+                setState(() => _isModalOpen = false);
+                ref.read(pairingRequestProvider.notifier).consume();
+              }
+            });
+          }
         });
       }
     });
+
     return AdaptiveScaffold(
       selectedIndex: _currentIndex,
       onDestinationSelected: (index) => setState(() => _currentIndex = index),
@@ -282,7 +281,6 @@ class _PeersTab extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // --- Identity Card ---
           Card(
             elevation: 0,
             color: Theme.of(context).colorScheme.surfaceContainer,
@@ -295,7 +293,6 @@ class _PeersTab extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSizes.p4),
-                  // Use AsyncValue.when for clean loading/error states
                   identityAsync.when(
                     data: (identity) => SelectableText(
                       identity.fingerprint,

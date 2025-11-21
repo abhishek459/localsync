@@ -33,15 +33,67 @@ class PairingRequest extends _$PairingRequest {
 Future<PairingData> myPairingData(Ref ref) async {
   final identityFuture = ref.watch(deviceIdentityProvider.future);
   final port = ref.watch(connectionPortProvider);
-  final ipFuture = NetworkInfo().getWifiIP();
+
+  // Handle Desktop vs Mobile IP fetching
+  String? ip;
+
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // On Desktop, use the robust dart:io NetworkInterface to find an IP.
+    // This works for Ethernet AND Wi-Fi.
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+
+      // Filter out common virtual adapters and link-local addresses
+      final validInterface = interfaces.firstWhere(
+        (interface) {
+          // Filter out empty interfaces
+          if (interface.addresses.isEmpty) return false;
+
+          final name = interface.name.toLowerCase();
+
+          // Filter out common virtual environment names
+          bool isVirtual =
+              name.contains('docker') ||
+              name.contains('vethernet') ||
+              name.contains('wsl') ||
+              name.contains('vmware') ||
+              name.contains('virtualbox');
+
+          if (isVirtual) return false;
+
+          // Check the actual IP address to ensure it's not link-local (169.254.x.x)
+          // Link-local means the interface is active but has no DHCP assignment.
+          final address = interface.addresses.first.address;
+          if (address.startsWith('169.254')) return false;
+
+          return true;
+        },
+        // Fallback: If we filtered everything out, just take the first non-empty one
+        orElse: () => interfaces.firstWhere(
+          (i) => i.addresses.isNotEmpty,
+          orElse: () => throw Exception('No network interfaces found'),
+        ),
+      );
+
+      ip = validInterface.addresses.first.address;
+    } catch (e) {
+      ip = null;
+    }
+  } else {
+    // On Mobile (Android/iOS), using network_info_plus as it
+    // handles specific mobile permissions and Wi-Fi state better.
+    ip = await NetworkInfo().getWifiIP();
+  }
 
   final identity = await identityFuture;
-  final ip = await ipFuture;
 
   if (ip == null) {
     throw Exception(
-      'Unable to retrieve Wi-Fi IP address. '
-      'Please ensure you are connected to a Wi-Fi network.',
+      'Unable to retrieve local IP address. '
+      'Please ensure you are connected to a network.',
     );
   }
 

@@ -37,10 +37,17 @@ Future<String?> masterKey(Ref ref) {
 @riverpod
 Future<List<int>> vaultAesKey(Ref ref) async {
   // 1. Get the stored mnemonic
-  final mnemonic = await ref.watch(masterKeyProvider.future);
-  if (mnemonic == null) {
+  final rawMnemonic = await ref.watch(masterKeyProvider.future);
+  if (rawMnemonic == null) {
     throw Exception('Cannot derive AES key: No master key is stored.');
   }
+
+  final mnemonic = rawMnemonic
+      .replaceAll(',', ' ')
+      .replaceAll(RegExp(r'[^a-zA-Z\s]'), '') // Remove unexpected symbols
+      .replaceAll(RegExp(r'\s+'), ' ') // Collapse multiple spaces
+      .trim()
+      .toLowerCase();
 
   // 2. Convert mnemonic string back to a Mnemonic object
   final mnemonicObj = Mnemonic.fromString(mnemonic);
