@@ -1,5 +1,6 @@
 import 'package:blockchain_utils/blockchain_utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_sync/src/rust/api/identity.dart';
 
 /// Handles the business logic for creating, importing, and storing
 /// the user's master mnemonic phrase.
@@ -26,6 +27,22 @@ class MasterKeyService {
 
   /// Securely persists the mnemonic to the device's keychain.
   Future<void> storeMnemonic(String mnemonic) async {
+    try {
+      // 2. Call Rust (The "Mirror" Logic)
+      // We pass the string to Rust, Rust does math (SHA256), and returns a struct.
+      print("🔵 Dart: Sending mnemonic to Rust...");
+
+      // Ensure Rust is initialized (Safe to call multiple times)
+
+      final identity = await generateIdentitySimple(mnemonic: mnemonic);
+
+      print("🟢 Rust Answered: Derived Device ID is ${identity.deviceId}");
+
+      // In the future, we will save 'identity.deviceId' to storage here too.
+    } catch (e) {
+      print("🔴 Rust Error: $e");
+      // We choose not to crash the app if Rust fails for now
+    }
     await _secureStorage.write(key: _masterKeyStorageKey, value: mnemonic);
   }
 

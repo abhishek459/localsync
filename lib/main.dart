@@ -16,8 +16,10 @@ import 'package:local_sync/features/shared/presentation/adaptive_scaffold.dart';
 import 'package:local_sync/features/shared/presentation/app_sizes.dart';
 import 'package:local_sync/features/shared/presentation/app_theme.dart';
 import 'package:local_sync/features/vault/presentation/secure_vault_screen.dart';
+import 'package:local_sync/src/rust/frb_generated.dart';
 
-void main() {
+Future<void> main() async {
+  await RustLib.init();
   runApp(const ProviderScope(child: MyApp()));
 }
 
