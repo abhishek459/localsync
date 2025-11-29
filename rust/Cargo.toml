@@ -8,11 +8,14 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 anyhow = "1.0.100"
+byteorder = "1.5.0"
+chacha20poly1305 = { version = "0.10.1", features = ["std", "stream"] }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 flutter_rust_bridge = "=2.11.1"
 hex = "0.4.3"
 rand = "0.8.5"
 sha2 = "0.10.9"
+zeroize = { version = "1.8.2" , features = ["derive"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

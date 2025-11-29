@@ -1,19 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:local_sync/features/transport/transport_protocol.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
 import 'package:local_sync/features/vault/domain/vault_file_header.dart';
+import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'vault_handler.g.dart';
 
-/// A custom exception for errors that occur during vault file handling.
 class VaultHandlerException implements Exception {
   final String message;
   VaultHandlerException(this.message);
-
   @override
   String toString() => message;
 }
@@ -22,15 +22,23 @@ class VaultHandler {
   final VaultRepository _repository;
   final Uuid _uuid;
   final void Function() _onFileHandled;
+  final Directory _vaultDir; // Injected to know where to save
 
-  VaultHandler(this._repository, this._uuid, this._onFileHandled);
+  VaultHandler(
+    this._repository,
+    this._uuid,
+    this._onFileHandled,
+    this._vaultDir,
+  );
 
+  /// Handles an incoming Vault File packet.
+  /// [messageData] contains: [HL (4)] [HeaderJSON] [Ciphertext]
   Future<void> handleMessage(Uint8List messageData) async {
     try {
-      // 1. Get Header Length (HL)
+      // 1. Parse Header Length
       if (messageData.length < TransportProtocol.headerLengthBytes) {
         throw VaultHandlerException(
-          'Received an incomplete file packet (missing header length).',
+          'Incomplete packet (missing header length).',
         );
       }
       final headerLenBytes = messageData.sublist(
@@ -39,56 +47,44 @@ class VaultHandler {
       );
       final headerLen = ByteData.sublistView(headerLenBytes).getUint32(0);
 
-      // 2. Get JSON Header
+      // 2. Parse JSON Header
       final headerStart = TransportProtocol.headerLengthBytes;
       final headerEnd = headerStart + headerLen;
 
       if (messageData.length < headerEnd) {
-        throw VaultHandlerException(
-          'Received an incomplete file packet (missing header data).',
-        );
+        throw VaultHandlerException('Incomplete packet (missing header data).');
       }
-      final headerBytes = messageData.sublist(headerStart, headerEnd);
-      final headerJson = utf8.decode(headerBytes);
-      final header = VaultFileHeader.fromJson(headerJson);
+      final headerJsonBytes = messageData.sublist(headerStart, headerEnd);
+      final header = VaultFileHeader.fromJson(utf8.decode(headerJsonBytes));
 
-      // 3. Get Ciphertext (everything after the header)
+      // 3. Extract Ciphertext
+      // Note: On the receiver side, with the current packet reassembler,
+      // this is still in RAM.
       final ciphertext = messageData.sublist(headerEnd);
 
-      // 4. Generate a new ID
+      // 4. Generate ID and Path
       final fileId = _uuid.v4();
+      final savePath = p.join(_vaultDir.path, fileId);
 
-      // 5. Decode metadata from Base64
+      // 5. Write Ciphertext to Disk
+      // We manually write it here because Repo doesn't accept bytes anymore.
+      final file = File(savePath);
+      await file.writeAsBytes(ciphertext);
+
+      // 6. Decode Nonce
       final nonce = base64Decode(header.nonce);
-      final mac = base64Decode(header.mac);
 
-      // 6. Save to repository
+      // 7. Save Metadata
       await _repository.addFile(
         id: fileId,
         filename: header.filename,
         nonce: nonce,
-        mac: mac,
-        ciphertext: ciphertext,
+        ciphertextPath: savePath,
       );
 
-      // 7. Notify listeners of success
       _onFileHandled();
-    } on FormatException catch (e) {
-      // Catches bad UTF-8, bad JSON, or bad Base64
-      throw VaultHandlerException(
-        'Failed to parse incoming file header. Data may be corrupt. (Details: $e)',
-      );
-    } on RangeError {
-      // Catches any .sublist failures
-      throw VaultHandlerException(
-        'Failed to parse incoming file packet. The packet was malformed or incomplete.',
-      );
     } catch (e) {
-      // Catch-all for other errors (e.g., repository I/O errors)
-      // We re-throw as our custom exception to standardize.
-      throw VaultHandlerException(
-        'Failed to save incoming file to the vault. (Details: $e)',
-      );
+      throw VaultHandlerException('Failed to process incoming file: $e');
     }
   }
 }
@@ -101,8 +97,14 @@ Future<VaultHandler> vaultHandler(Ref ref) async {
   final repository = await ref.watch(vaultRepositoryProvider.future);
   final uuid = ref.watch(uuidProvider);
 
-  // Inject the callback to invalidate the vault files list on success
+  // Need the directory to save incoming files
+  final appDocsDir = await ref.watch(appDocumentsDirectoryProvider.future);
+  final vaultDir = Directory(p.join(appDocsDir.path, 'SecureVaultData'));
+  if (!vaultDir.existsSync()) {
+    vaultDir.createSync(recursive: true);
+  }
+
   return VaultHandler(repository, uuid, () {
     ref.invalidate(vaultFilesProvider);
-  });
+  }, vaultDir);
 }

@@ -79,7 +79,6 @@ class DatabaseService {
         id TEXT PRIMARY KEY,
         filename TEXT NOT NULL,
         nonce BLOB NOT NULL,
-        mac BLOB NOT NULL,
         ciphertext_path TEXT NOT NULL,
         added_at INTEGER NOT NULL
       );

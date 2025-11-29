@@ -327,6 +327,76 @@ class ConnectionService {
     }
   }
 
+  /// Sends a stream of data to all connected and trusted peers.
+  ///
+  /// [header] is sent first (e.g. framing + metadata).
+  /// [dataStreamFactory] is a callback that produces a [Stream] of the file content.
+  /// We need a factory because we must create a fresh stream for each peer socket.
+  Future<void> broadcastStream({
+    required Uint8List header,
+    required Stream<List<int>> Function() dataStreamFactory,
+    required int totalSize,
+    void Function(int sent)? onProgress,
+  }) async {
+    if (_activeConnections.isEmpty) return;
+
+    final List<String> disconnectedPeers = [];
+    final List<Future<void>> tasks = [];
+
+    // Track bytes sent for progress reporting.
+    // Note: If sending to multiple peers, we report "100%" when ONE peer finishes
+    // or average them? Simplest is to track the *first* peer's progress for UI.
+    int bytesSentSoFar = 0;
+
+    // Header is sent immediately, count it.
+    bytesSentSoFar += header.length;
+
+    for (final entry in _activeConnections.entries) {
+      final fingerprint = entry.key;
+      final socket = entry.value.key;
+
+      tasks.add(
+        Future(() async {
+          try {
+            // 1. Write the header
+            socket.add(header);
+
+            // 2. Prepare the stream with progress tracking
+            Stream<List<int>> stream = dataStreamFactory();
+
+            // Only the first task updates the global progress UI to avoid flickering
+            bool isPrimaryTracker = (tasks.isEmpty);
+
+            stream = stream.map((chunk) {
+              if (isPrimaryTracker) {
+                bytesSentSoFar += chunk.length;
+                onProgress?.call(bytesSentSoFar);
+              }
+              return chunk;
+            });
+
+            // 3. Pipe the stream
+            await socket.addStream(stream);
+            await socket.flush();
+          } catch (e) {
+            disconnectedPeers.add(fingerprint);
+          }
+        }),
+      );
+    }
+
+    await Future.wait(tasks);
+    _cleanupDisconnectedPeers(disconnectedPeers);
+  }
+
+  void _cleanupDisconnectedPeers(List<String> peers) {
+    for (final fingerprint in peers) {
+      if (_activeConnections.containsKey(fingerprint)) {
+        _cleanupSocket(_activeConnections[fingerprint]!.key, fingerprint);
+      }
+    }
+  }
+
   void dispose() {
     _server?.close();
     _server = null;

@@ -14,6 +14,7 @@ class SecureVaultScreen extends ConsumerWidget {
     final vaultFilesAsync = ref.watch(vaultFilesProvider);
     final vaultFileSender = ref.watch(vaultFileSenderProvider);
     final vaultFileDecrypter = ref.watch(vaultFileDecrypterProvider);
+    // final transferProgress = ref.watch(transferProgressProvider);
 
     ref.listen(vaultFileSenderProvider, (prev, next) {
       if (next is AsyncError) {
@@ -51,52 +52,65 @@ class SecureVaultScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      body: vaultFilesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(
-          child: Text(
-            'Error loading vault: $err',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ),
-        data: (files) {
-          if (files.isEmpty) {
-            return ListTile(
-              leading: Icon(
-                Icons.info_outline,
-                size: 48,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              title: const Text('Your Secure Vault is empty'),
-              subtitle: Text(
-                'Tap the "+" button to add a file.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+      body: Column(
+        children: [
+          // --- PROGRESS BAR ---
+          // Shows only when sending (loading)
+          // if (vaultFileSender.isLoading)
+          //   LinearProgressIndicator(
+          //     value: transferProgress > 0 ? transferProgress : null,
+          //     minHeight: 6,
+          //   ),
+          Expanded(
+            child: vaultFilesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(
+                child: Text(
+                  'Error loading vault: $err',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            );
-          }
+              data: (files) {
+                if (files.isEmpty) {
+                  return ListTile(
+                    leading: Icon(
+                      Icons.info_outline,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    title: const Text('Your Secure Vault is empty'),
+                    subtitle: Text(
+                      'Tap the "+" button to add a file.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
 
-          final bool isDecrypting = vaultFileDecrypter.isLoading;
+                final bool isDecrypting = vaultFileDecrypter.isLoading;
 
-          return ListView.builder(
-            itemCount: files.length,
-            itemBuilder: (context, index) {
-              final file = files[index];
-              return ListTile(
-                title: Text(file.filename),
-                subtitle: Text('Added: ${file.addedAt.toLocal()}'),
-                onTap: isDecrypting
-                    ? null
-                    : () {
-                        ref
-                            .read(vaultFileDecrypterProvider.notifier)
-                            .decryptAndSave(file);
-                      },
-              );
-            },
-          );
-        },
+                return ListView.builder(
+                  itemCount: files.length,
+                  itemBuilder: (context, index) {
+                    final file = files[index];
+                    return ListTile(
+                      title: Text(file.filename),
+                      subtitle: Text('Added: ${file.addedAt.toLocal()}'),
+                      onTap: isDecrypting
+                          ? null
+                          : () {
+                              ref
+                                  .read(vaultFileDecrypterProvider.notifier)
+                                  .decryptAndSave(file);
+                            },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: vaultFileSender.isLoading
@@ -127,6 +141,7 @@ class SecureVaultScreen extends ConsumerWidget {
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 3),
               )
+            //  const Icon(Icons.hourglass_empty)
             : const Icon(Icons.add),
       ),
     );

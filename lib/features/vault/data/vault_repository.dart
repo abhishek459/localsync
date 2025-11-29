@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:local_sync/features/trust/data/trust_providers.dart';
 import 'package:local_sync/features/vault/domain/vault_file_metadata.dart';
@@ -17,35 +16,28 @@ class VaultRepository {
 
   VaultRepository(this._db, this._vaultDataDir);
 
-  /// Saves ciphertext to a file and inserts the metadata into the database.
   Future<void> addFile({
     required String id,
     required String filename,
     required List<int> nonce,
-    required List<int> mac,
-    required Uint8List ciphertext,
+    required String ciphertextPath,
   }) async {
     // 1. Ensure the vault data directory exists
     if (!_vaultDataDir.existsSync()) {
       _vaultDataDir.createSync(recursive: true);
     }
 
-    // 2. Save the ciphertext to disk
-    final ciphertextPath = p.join(_vaultDataDir.path, id);
-    final file = File(ciphertextPath);
-    await file.writeAsBytes(ciphertext);
-
-    // 3. Save the metadata to the database
+    // 2. Save the metadata to the database
+    // We explicitly insert ciphertext_path so we can find the file later.
     final stmt = _db.prepare(
-      'INSERT INTO secure_vault (id, filename, nonce, mac, ciphertext_path, added_at) '
-      'VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO secure_vault (id, filename, nonce, ciphertext_path, added_at) '
+      'VALUES (?, ?, ?, ?, ?)',
     );
     try {
       stmt.execute([
         id,
         filename,
         nonce,
-        mac,
         ciphertextPath,
         DateTime.now().millisecondsSinceEpoch,
       ]);

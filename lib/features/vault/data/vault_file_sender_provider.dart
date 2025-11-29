@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:local_sync/features/connection/data/connection_providers.dart';
@@ -7,9 +8,21 @@ import 'package:local_sync/features/vault/application/encryption_service.dart';
 import 'package:local_sync/features/vault/application/vault_handler.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
 import 'package:local_sync/features/vault/domain/vault_file_header.dart';
+import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'vault_file_sender_provider.g.dart';
+
+/// Holds the progress of the current file transfer (0.0 to 1.0).
+@riverpod
+class TransferProgress extends _$TransferProgress {
+  @override
+  double build() => 0.0;
+
+  void setProgress(double value) {
+    state = value;
+  }
+}
 
 @riverpod
 class VaultFileSender extends _$VaultFileSender {
@@ -18,6 +31,9 @@ class VaultFileSender extends _$VaultFileSender {
 
   Future<void> sendFile(String path, String filename) async {
     state = const AsyncLoading();
+    // Reset progress to 0
+    ref.read(transferProgressProvider.notifier).setProgress(0.0);
+
     state = await AsyncValue.guard(() async {
       final encryptionService = await ref.read(
         encryptionServiceProvider.future,
@@ -26,48 +42,68 @@ class VaultFileSender extends _$VaultFileSender {
         connectionServiceProvider.future,
       );
       final repository = await ref.read(vaultRepositoryProvider.future);
+
+      final appDocsDir = await ref.read(appDocumentsDirectoryProvider.future);
+      final vaultDir = Directory(p.join(appDocsDir.path, 'SecureVaultData'));
+      if (!vaultDir.existsSync()) vaultDir.createSync(recursive: true);
+
       final fileId = ref.read(uuidProvider).v4();
+      final destinationPath = p.join(vaultDir.path, fileId);
 
-      final encryptedFile = await encryptionService.encryptFile(path);
+      // Phase 1: Encrypting
+      // We could add a "status" provider here if you want text updates
+      final encryptedFile = await encryptionService.encryptFile(
+        inputPath: path,
+        outputPath: destinationPath,
+      );
 
+      // Phase 2: Preparing Transfer
       final header = VaultFileHeader(
         filename: filename,
         nonce: base64Encode(encryptedFile.nonce),
-        mac: base64Encode(encryptedFile.mac),
       );
-      final headerBytes = utf8.encode(header.toJson());
+      final headerJsonBytes = utf8.encode(header.toJson());
+      final headerLenBytes = ByteData(4)..setUint32(0, headerJsonBytes.length);
 
-      final headerLenBytes = ByteData(4)..setUint32(0, headerBytes.length);
+      final metaBuilder = BytesBuilder();
+      metaBuilder.addByte(MessageType.vaultFile.value);
+      metaBuilder.add(headerLenBytes.buffer.asUint8List());
+      metaBuilder.add(headerJsonBytes);
+      final metaBytes = metaBuilder.toBytes();
 
-      final builder = BytesBuilder();
-      builder.addByte(MessageType.vaultFile.value);
-      builder.add(headerLenBytes.buffer.asUint8List());
-      builder.add(headerBytes);
-      builder.add(encryptedFile.ciphertext);
+      final fileLen = await File(destinationPath).length();
+      final totalPayloadLen = metaBytes.length + fileLen;
 
-      final fullPayload = builder.toBytes();
+      final frameHeaderBuilder = BytesBuilder();
+      final totalLenBytes = ByteData(4)..setUint32(0, totalPayloadLen.toInt());
+      frameHeaderBuilder.add(totalLenBytes.buffer.asUint8List());
+      frameHeaderBuilder.add(metaBytes);
 
-      final frameBuilder = BytesBuilder();
-      final lengthData = ByteData(4)..setUint32(0, fullPayload.length);
-      frameBuilder.add(lengthData.buffer.asUint8List());
-      frameBuilder.add(fullPayload);
+      // Phase 3: Streaming with Progress
+      await connectionService.broadcastStream(
+        header: frameHeaderBuilder.toBytes(),
+        dataStreamFactory: () => File(destinationPath).openRead(),
+        totalSize: totalPayloadLen, // Pass total size
+        onProgress: (sentBytes) {
+          // Update the progress provider
+          final percent = sentBytes / totalPayloadLen;
+          ref.read(transferProgressProvider.notifier).setProgress(percent);
+        },
+      );
 
-      final framedPayload = frameBuilder.toBytes();
-
-      // 1. Save to local repository *first*
+      // Finalize
       await repository.addFile(
         id: fileId,
         filename: filename,
         nonce: encryptedFile.nonce,
-        mac: encryptedFile.mac,
-        ciphertext: encryptedFile.ciphertext,
+        ciphertextPath: destinationPath,
       );
 
-      // 2. Invalidate local UI so sender sees the file
       ref.invalidate(vaultFilesProvider);
 
-      // 3. Broadcast to peers
-      await connectionService.broadcast(framedPayload);
+      // Reset progress after a short delay so the user sees 100%
+      await Future.delayed(const Duration(milliseconds: 500));
+      ref.read(transferProgressProvider.notifier).setProgress(0.0);
     });
   }
 }
