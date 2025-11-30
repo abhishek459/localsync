@@ -7,7 +7,6 @@ import 'package:local_sync/features/transport/transport_protocol.dart';
 import 'package:local_sync/features/vault/application/encryption_service.dart';
 import 'package:local_sync/features/vault/application/vault_handler.dart';
 import 'package:local_sync/features/vault/data/vault_repository.dart';
-import 'package:local_sync/features/vault/domain/vault_file_header.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -19,9 +18,7 @@ class TransferProgress extends _$TransferProgress {
   @override
   double build() => 0.0;
 
-  void setProgress(double value) {
-    state = value;
-  }
+  void setProgress(double value) => state = value;
 }
 
 @riverpod
@@ -31,7 +28,6 @@ class VaultFileSender extends _$VaultFileSender {
 
   Future<void> sendFile(String path, String filename) async {
     state = const AsyncLoading();
-    // Reset progress to 0
     ref.read(transferProgressProvider.notifier).setProgress(0.0);
 
     state = await AsyncValue.guard(() async {
@@ -42,56 +38,101 @@ class VaultFileSender extends _$VaultFileSender {
         connectionServiceProvider.future,
       );
       final repository = await ref.read(vaultRepositoryProvider.future);
-
       final appDocsDir = await ref.read(appDocumentsDirectoryProvider.future);
+      final uuid = ref.read(uuidProvider);
+
+      // 1. Prepare Storage
       final vaultDir = Directory(p.join(appDocsDir.path, 'SecureVaultData'));
       if (!vaultDir.existsSync()) vaultDir.createSync(recursive: true);
 
-      final fileId = ref.read(uuidProvider).v4();
+      final fileId = uuid.v4();
       final destinationPath = p.join(vaultDir.path, fileId);
 
-      // Phase 1: Encrypting
-      // We could add a "status" provider here if you want text updates
+      // 2. Encrypt to Disk (Phase 1)
+      // This produces the full encrypted file locally first.
       final encryptedFile = await encryptionService.encryptFile(
         inputPath: path,
         outputPath: destinationPath,
       );
 
-      // Phase 2: Preparing Transfer
-      final header = VaultFileHeader(
-        filename: filename,
-        nonce: base64Encode(encryptedFile.nonce),
+      final fileOnDisk = File(destinationPath);
+      final totalSize = await fileOnDisk.length();
+
+      // 3. Send "Transfer Start" Control Packet
+      final startMetadata = {
+        'fileId': fileId,
+        'filename': filename,
+        'totalSize': totalSize,
+        'nonce': base64Encode(encryptedFile.nonce),
+        'fileType': 'vault',
+      };
+
+      final startJson = utf8.encode(jsonEncode(startMetadata));
+      final startPacketBuilder = BytesBuilder();
+
+      // Frame: [Type] [Len] [Payload]
+      startPacketBuilder.addByte(MessageType.transferStart.value);
+
+      final lenBytes = ByteData(4)..setUint32(0, startJson.length);
+      startPacketBuilder.add(lenBytes.buffer.asUint8List());
+      startPacketBuilder.add(startJson);
+
+      // Note: We need to frame the *entire* message for the PacketReassembler
+      // The PacketReassembler expects: [TotalFrameLen] [Body]
+      final startPayload = startPacketBuilder.toBytes();
+      final startFrameHeader = ByteData(4)..setUint32(0, startPayload.length);
+
+      await connectionService.broadcast(
+        Uint8List.fromList([
+          ...startFrameHeader.buffer.asUint8List(),
+          ...startPayload,
+        ]),
       );
-      final headerJsonBytes = utf8.encode(header.toJson());
-      final headerLenBytes = ByteData(4)..setUint32(0, headerJsonBytes.length);
 
-      final metaBuilder = BytesBuilder();
-      metaBuilder.addByte(MessageType.vaultFile.value);
-      metaBuilder.add(headerLenBytes.buffer.asUint8List());
-      metaBuilder.add(headerJsonBytes);
-      final metaBytes = metaBuilder.toBytes();
+      // 4. Send Chunks Loop
+      final fileStream = fileOnDisk.openRead();
+      int bytesSent = 0;
 
-      final fileLen = await File(destinationPath).length();
-      final totalPayloadLen = metaBytes.length + fileLen;
+      // We read large chunks from disk, but we might want to ensure they
+      // fit our maxChunkSize protocol limit.
+      // File.openRead() usually yields ~64kb chunks, which is fine.
+      await for (final chunk in fileStream) {
+        // Prepare the Chunk Packet Payload
+        // Format: [Type (1)] [FileId Len (4)] [FileId (N)] [Data]
+        // *Optimization*: Since FileID is fixed UUID (36 chars), we can hardcode len or just send bytes.
+        // Let's stick to a robust parser:
+        // [Type: transferChunk] [FileId (36 bytes ASCII)] [Data]
 
-      final frameHeaderBuilder = BytesBuilder();
-      final totalLenBytes = ByteData(4)..setUint32(0, totalPayloadLen.toInt());
-      frameHeaderBuilder.add(totalLenBytes.buffer.asUint8List());
-      frameHeaderBuilder.add(metaBytes);
+        final chunkBuilder = BytesBuilder();
+        chunkBuilder.addByte(MessageType.transferChunk.value);
 
-      // Phase 3: Streaming with Progress
-      await connectionService.broadcastStream(
-        header: frameHeaderBuilder.toBytes(),
-        dataStreamFactory: () => File(destinationPath).openRead(),
-        totalSize: totalPayloadLen, // Pass total size
-        onProgress: (sentBytes) {
-          // Update the progress provider
-          final percent = sentBytes / totalPayloadLen;
-          ref.read(transferProgressProvider.notifier).setProgress(percent);
-        },
-      );
+        // File ID (UUID is 36 bytes)
+        final fileIdBytes = utf8.encode(fileId);
+        // We assume ID is always 36 bytes for now, or we prefix len.
+        // Let's prefix len to be safe.
+        chunkBuilder.addByte(fileIdBytes.length); // 1 byte len is enough for ID
+        chunkBuilder.add(fileIdBytes);
 
-      // Finalize
+        // Data
+        chunkBuilder.add(chunk);
+
+        final chunkPayload = chunkBuilder.toBytes();
+
+        // Wrap in TCP Frame for Reassembler
+        final tcpFrameHeader = ByteData(4)..setUint32(0, chunkPayload.length);
+        final fullTcpFrame = BytesBuilder();
+        fullTcpFrame.add(tcpFrameHeader.buffer.asUint8List());
+        fullTcpFrame.add(chunkPayload);
+
+        await connectionService.broadcast(fullTcpFrame.toBytes());
+
+        bytesSent += chunk.length;
+        ref
+            .read(transferProgressProvider.notifier)
+            .setProgress(bytesSent / totalSize);
+      }
+
+      // 5. Finalize Local Record
       await repository.addFile(
         id: fileId,
         filename: filename,
@@ -101,7 +142,7 @@ class VaultFileSender extends _$VaultFileSender {
 
       ref.invalidate(vaultFilesProvider);
 
-      // Reset progress after a short delay so the user sees 100%
+      // UI Polish: smooth finish
       await Future.delayed(const Duration(milliseconds: 500));
       ref.read(transferProgressProvider.notifier).setProgress(0.0);
     });

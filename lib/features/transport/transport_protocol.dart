@@ -1,37 +1,41 @@
-/// Defines the v0.1 transport protocol structure.
+/// Defines the v0.2 transport protocol structure.
 ///
-/// We are multiplexing different features (Vault, Sync) over a single
-/// socket connection. The first byte of every message will be a
-/// [MessageType] identifier to allow the receiver to route the
-/// data to the correct handler.
+/// We use a stateful chunking protocol to handle large files without
+/// consuming excessive RAM.
 ///
-/// ### Vault v0.1 Packet Structure
-///
-/// | Bytes | Content | Description |
-/// | :--- | :--- | :--- |
-/// | 1 | MessageType (0x01) | Identifies this as a Secure Vault file. |
-/// | 4 | Header Length (HL) | A 32-bit unsigned int (Big Endian) specifying the length of the JSON header. |
-/// | HL | Header JSON | A UTF-8 encoded JSON string containing file metadata. |
-/// | ... | Ciphertext | The raw encrypted file bytes. |
-///
+/// ### Protocol Flow
+/// 1. [transferStart] -> Receiver opens file stream.
+/// 2. [transferChunk] -> Receiver appends data to stream.
+/// 3. [transferChunk] ...
+/// 4. (Receiver detects totalSize reached) -> Closes stream, finalizes file.
 class TransportProtocol {
   /// The length, in bytes, of the 32-bit integer that defines the header length.
   static const int headerLengthBytes = 4;
+
+  /// The max size of a single file chunk (1MB).
+  /// Keeping this small ensures responsiveness and low memory footprint.
+  static const int maxChunkSize = 1024 * 1024;
 }
 
 /// A 1-byte identifier for the message type.
 enum MessageType {
-  /// (0x00) Reserved for handshake or ping.
   unknown(0x00),
 
-  /// (0x01) A file for the Secure Vault.
-  vaultFile(0x01),
+  // -- Auth --
+  auth(0x03),
 
-  /// (0x02) A file for the P2P Synced Folder.
-  syncFile(0x02),
+  // -- V0.2 Chunked Protocol --
+  /// Control packet to initiate a transfer.
+  /// Payload: JSON { fileId, filename, totalSize, nonce, type: 'vault'|'sync' }
+  transferStart(0x04),
 
-  /// (0x03) Authentication packet (Certificate exchange).
-  auth(0x03);
+  /// Data packet containing a byte range.
+  /// Payload: [FileID (36 bytes string)] [Data Bytes]
+  /// Note: We use the ID to map chunks to the correct active transfer.
+  transferChunk(0x05),
+
+  /// (Optional) Acknowledge receipt of a specific chunk or completion.
+  ack(0x06);
 
   const MessageType(this.value);
   final int value;
