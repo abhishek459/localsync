@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1889575133;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -993605837;
 
 // Section: executor
 
@@ -129,7 +129,7 @@ fn wire__crate__api__vault__encrypt_file_stream_impl(
         },
     )
 }
-fn wire__crate__api__identity__generate_identity_simple_impl(
+fn wire__crate__api__identity__generate_identity_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -137,7 +137,7 @@ fn wire__crate__api__identity__generate_identity_simple_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "generate_identity_simple",
+            debug_name: "generate_identity",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -151,13 +151,12 @@ fn wire__crate__api__identity__generate_identity_simple_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_mnemonic = <String>::sse_decode(&mut deserializer);
+            let api_display_name = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
-                        let output_ok =
-                            crate::api::identity::generate_identity_simple(api_mnemonic)?;
+                        let output_ok = crate::api::identity::generate_identity(api_display_name)?;
                         Ok(output_ok)
                     })(),
                 )
@@ -208,8 +207,14 @@ impl SseDecode for crate::api::identity::LocalIdentity {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_deviceId = <String>::sse_decode(deserializer);
+        let mut var_deviceName = <String>::sse_decode(deserializer);
+        let mut var_privateKeyPem = <String>::sse_decode(deserializer);
+        let mut var_certificatePem = <String>::sse_decode(deserializer);
         return crate::api::identity::LocalIdentity {
             device_id: var_deviceId,
+            device_name: var_deviceName,
+            private_key_pem: var_privateKeyPem,
+            certificate_pem: var_certificatePem,
         };
     }
 }
@@ -251,12 +256,7 @@ fn pde_ffi_dispatcher_primary_impl(
     match func_id {
         1 => wire__crate__api__vault__decrypt_file_stream_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__vault__encrypt_file_stream_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__identity__generate_identity_simple_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
+        3 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -295,7 +295,13 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::vault::EncryptionResult>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::identity::LocalIdentity {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [self.device_id.into_into_dart().into_dart()].into_dart()
+        [
+            self.device_id.into_into_dart().into_dart(),
+            self.device_name.into_into_dart().into_dart(),
+            self.private_key_pem.into_into_dart().into_dart(),
+            self.certificate_pem.into_into_dart().into_dart(),
+        ]
+        .into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -345,6 +351,9 @@ impl SseEncode for crate::api::identity::LocalIdentity {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.device_id, serializer);
+        <String>::sse_encode(self.device_name, serializer);
+        <String>::sse_encode(self.private_key_pem, serializer);
+        <String>::sse_encode(self.certificate_pem, serializer);
     }
 }
 

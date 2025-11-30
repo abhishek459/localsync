@@ -1,54 +1,30 @@
-import 'package:basic_utils/basic_utils.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-/// A data class holding the cryptographic identity of this device.
-class DeviceIdentity {
-  /// The parsed RSA private key object.
-  final RSAPrivateKey? privateKey;
+part 'device_identity.freezed.dart';
 
-  /// The raw PEM-formatted string for the private key.
-  final String? privateKeyPem;
+/// A domain entity representing the device's cryptographic identity.
+///
+/// We store keys in PEM format. The actual key generation and parsing
+/// happen in the Rust layer (via FFI).
+///
+/// NOTE: This class must be 'abstract' or a 'mixin class' to work
+/// properly with Freezed mixins without compiler errors.
+@freezed
+abstract class DeviceIdentity with _$DeviceIdentity {
+  const factory DeviceIdentity({
+    /// The unique fingerprint of the device (SHA-256 of the certificate).
+    /// Used as the primary node ID in the P2P mesh.
+    required String deviceId,
 
-  /// The parsed X.509 certificate object.
-  /// This contains all certificate data, including validity,
-  /// subject, and the SHA-256 thumbprint.
-  /// It also contains the raw PEM string in its `.plain` property.
-  final X509CertificateData? certificate;
+    /// The human-readable display name (e.g. "Abhishek's Pixel").
+    required String deviceName,
 
-  /// The unique SHA-256 fingerprint, lowercase, no colons.
-  /// This is our canonical "Device ID".
-  final String fingerprint;
+    /// The raw RSA Private Key in PEM format.
+    /// ⚠️ SENSITIVE: Never share this over the network.
+    required String privateKeyPem,
 
-  const DeviceIdentity({
-    required this.privateKey,
-    required this.privateKeyPem,
-    required this.certificate,
-    required this.fingerprint,
-  });
-
-  /// An "empty" identity for initial loading states.
-  static const DeviceIdentity empty = DeviceIdentity(
-    privateKey: null,
-    privateKeyPem: null,
-    certificate: null,
-    fingerprint: '',
-  );
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-
-    return other is DeviceIdentity &&
-        other.privateKey == privateKey &&
-        other.privateKeyPem == privateKeyPem &&
-        other.certificate == certificate &&
-        other.fingerprint == fingerprint;
-  }
-
-  @override
-  int get hashCode {
-    return privateKey.hashCode ^
-        privateKeyPem.hashCode ^
-        certificate.hashCode ^
-        fingerprint.hashCode;
-  }
+    /// The X.509 Certificate in PEM format.
+    /// This contains the public key and is safe to share during TLS handshakes.
+    required String publicCertPem,
+  }) = _DeviceIdentity;
 }

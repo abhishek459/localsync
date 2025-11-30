@@ -91,11 +91,9 @@ class ConnectionService {
        _securityContext = SecurityContext() {
     try {
       final certBytes = Uint8List.fromList(
-        utf8.encode(_identity.certificate!.plain!),
+        utf8.encode(_identity.publicCertPem),
       );
-      final keyBytes = Uint8List.fromList(
-        utf8.encode(_identity.privateKeyPem!),
-      );
+      final keyBytes = Uint8List.fromList(utf8.encode(_identity.privateKeyPem));
 
       // 1. Load our Identity (Certificate Chain + Private Key)
       // This is used by the Server to prove its identity to clients.
@@ -277,7 +275,7 @@ class ConnectionService {
       // PacketReassembler can handle it correctly.
       final authPayloadBuilder = BytesBuilder();
       authPayloadBuilder.addByte(MessageType.auth.value);
-      authPayloadBuilder.add(utf8.encode(_identity.certificate!.plain!));
+      authPayloadBuilder.add(utf8.encode(_identity.publicCertPem));
       final payload = authPayloadBuilder.toBytes();
 
       final frameBuilder = BytesBuilder();

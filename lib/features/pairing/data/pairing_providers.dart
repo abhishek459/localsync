@@ -97,7 +97,7 @@ Future<PairingData> myPairingData(Ref ref) async {
     );
   }
 
-  return PairingData(ip: ip, port: port, fingerprint: identity.fingerprint);
+  return PairingData(ip: ip, port: port, fingerprint: identity.deviceId);
 }
 
 /// Notifier for managing the "Show My Info" screen state.

@@ -39,7 +39,7 @@ class DiscoveryService {
         name: deviceName, // e.g., "My Pixel 8"
         type: _serviceType,
         port: _port,
-        attributes: {'id': _identity.fingerprint},
+        attributes: {'id': _identity.deviceId},
       );
 
       _broadcast = BonsoirBroadcast(service: service);
@@ -124,7 +124,7 @@ class DiscoveryService {
       return;
     }
 
-    if (id == _identity.fingerprint) {
+    if (id == _identity.deviceId) {
       return;
     }
 

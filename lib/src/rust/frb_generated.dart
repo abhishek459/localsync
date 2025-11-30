@@ -65,7 +65,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1889575133;
+  int get rustContentHash => -993605837;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -89,8 +89,8 @@ abstract class RustLibApi extends BaseApi {
     required List<int> keyBytes,
   });
 
-  Future<LocalIdentity> crateApiIdentityGenerateIdentitySimple({
-    required String mnemonic,
+  Future<LocalIdentity> crateApiIdentityGenerateIdentity({
+    required String displayName,
   });
 }
 
@@ -179,14 +179,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<LocalIdentity> crateApiIdentityGenerateIdentitySimple({
-    required String mnemonic,
+  Future<LocalIdentity> crateApiIdentityGenerateIdentity({
+    required String displayName,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(mnemonic, serializer);
+          sse_encode_String(displayName, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -198,17 +198,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_local_identity,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kCrateApiIdentityGenerateIdentitySimpleConstMeta,
-        argValues: [mnemonic],
+        constMeta: kCrateApiIdentityGenerateIdentityConstMeta,
+        argValues: [displayName],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIdentityGenerateIdentitySimpleConstMeta =>
+  TaskConstMeta get kCrateApiIdentityGenerateIdentityConstMeta =>
       const TaskConstMeta(
-        debugName: "generate_identity_simple",
-        argNames: ["mnemonic"],
+        debugName: "generate_identity",
+        argNames: ["displayName"],
       );
 
   @protected
@@ -248,9 +248,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LocalIdentity dco_decode_local_identity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 1)
-      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
-    return LocalIdentity(deviceId: dco_decode_String(arr[0]));
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return LocalIdentity(
+      deviceId: dco_decode_String(arr[0]),
+      deviceName: dco_decode_String(arr[1]),
+      privateKeyPem: dco_decode_String(arr[2]),
+      certificatePem: dco_decode_String(arr[3]),
+    );
   }
 
   @protected
@@ -304,7 +309,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LocalIdentity sse_decode_local_identity(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_deviceId = sse_decode_String(deserializer);
-    return LocalIdentity(deviceId: var_deviceId);
+    var var_deviceName = sse_decode_String(deserializer);
+    var var_privateKeyPem = sse_decode_String(deserializer);
+    var var_certificatePem = sse_decode_String(deserializer);
+    return LocalIdentity(
+      deviceId: var_deviceId,
+      deviceName: var_deviceName,
+      privateKeyPem: var_privateKeyPem,
+      certificatePem: var_certificatePem,
+    );
   }
 
   @protected
@@ -380,6 +393,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_local_identity(LocalIdentity self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.deviceId, serializer);
+    sse_encode_String(self.deviceName, serializer);
+    sse_encode_String(self.privateKeyPem, serializer);
+    sse_encode_String(self.certificatePem, serializer);
   }
 
   @protected

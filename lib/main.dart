@@ -297,7 +297,7 @@ class _PeersTab extends ConsumerWidget {
                   const SizedBox(height: AppSizes.p4),
                   identityAsync.when(
                     data: (identity) => SelectableText(
-                      identity.fingerprint,
+                      identity.deviceId,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.labelSmall,
                     ),

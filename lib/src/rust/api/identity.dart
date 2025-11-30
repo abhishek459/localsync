@@ -6,23 +6,38 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-Future<LocalIdentity> generateIdentitySimple({required String mnemonic}) =>
-    RustLib.instance.api.crateApiIdentityGenerateIdentitySimple(
-      mnemonic: mnemonic,
-    );
+Future<LocalIdentity> generateIdentity({required String displayName}) => RustLib
+    .instance
+    .api
+    .crateApiIdentityGenerateIdentity(displayName: displayName);
 
 class LocalIdentity {
   final String deviceId;
+  final String deviceName;
+  final String privateKeyPem;
+  final String certificatePem;
 
-  const LocalIdentity({required this.deviceId});
+  const LocalIdentity({
+    required this.deviceId,
+    required this.deviceName,
+    required this.privateKeyPem,
+    required this.certificatePem,
+  });
 
   @override
-  int get hashCode => deviceId.hashCode;
+  int get hashCode =>
+      deviceId.hashCode ^
+      deviceName.hashCode ^
+      privateKeyPem.hashCode ^
+      certificatePem.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is LocalIdentity &&
           runtimeType == other.runtimeType &&
-          deviceId == other.deviceId;
+          deviceId == other.deviceId &&
+          deviceName == other.deviceName &&
+          privateKeyPem == other.privateKeyPem &&
+          certificatePem == other.certificatePem;
 }

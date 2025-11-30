@@ -8,6 +8,7 @@
 .history
 .DS_Store
 *.g.dart
+*.freezed.dart
 
 # Flutter repo-specific
 /bin/cache/
