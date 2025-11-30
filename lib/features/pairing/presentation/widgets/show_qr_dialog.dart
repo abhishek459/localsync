@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
@@ -10,7 +12,7 @@ class ShowMyQrDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Serialize the data to JSON
-    final qrData = pairingData.toJson();
+    final qrData = jsonEncode(pairingData.toJson());
 
     return Column(
       mainAxisSize: MainAxisSize.min,

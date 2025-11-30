@@ -28,7 +28,7 @@ class DisplayPairingInfo extends StatelessWidget {
         const SizedBox(height: AppSizes.p4),
         _buildInfoRow(context, 'Port:', pairingData.port.toString()),
         const SizedBox(height: AppSizes.p4),
-        _buildInfoRow(context, 'Device Fingerprint:', pairingData.fingerprint),
+        _buildInfoRow(context, 'Device Fingerprint:', pairingData.deviceId),
       ],
     );
   }

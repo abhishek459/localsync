@@ -23,6 +23,7 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
   String? _ipAddress;
   final _portController = TextEditingController();
   final _fingerprintController = TextEditingController();
+  final _aliasController = TextEditingController();
 
   @override
   void initState() {
@@ -34,6 +35,7 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
   void dispose() {
     _portController.dispose();
     _fingerprintController.dispose();
+    _aliasController.dispose();
     super.dispose();
   }
 
@@ -50,15 +52,16 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
       final pairingData = PairingData(
         ip: _ipAddress!,
         port: int.parse(_portController.text),
-        fingerprint: _fingerprintController.text,
+        deviceId: _fingerprintController.text,
+        alias: _aliasController.text,
       );
 
       await ref
           .read(trustListProvider.notifier)
-          .addPeerFromPairingData(pairingData, 'Manually Added Peer');
+          .addPeerFromPairingData(pairingData, pairingData.alias);
 
       if (!mounted) return;
-      NotificationReporter.reportSuccess('Peer trusted! You can now connect.');
+      NotificationReporter.reportSuccess('${pairingData.alias} trusted!');
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
@@ -89,8 +92,23 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSizes.p2),
-            const Text(
-              'Enter the IP, Port, and Fingerprint shown on your other device.',
+            const Text('Enter the details shown on the other device.'),
+            const SizedBox(height: AppSizes.p4),
+
+            // 1. Device Name Input (NEW)
+            TextFormField(
+              controller: _aliasController,
+              decoration: const InputDecoration(
+                labelText: 'Device Name (Alias)',
+                hintText: 'e.g. Dad\'s Laptop',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please give this device a name';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: AppSizes.p4),
             IpAddressInputWidget(
@@ -105,7 +123,10 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
               controller: _portController,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Port'),
+              decoration: const InputDecoration(
+                labelText: 'Port',
+                prefixIcon: Icon(Icons.numbers),
+              ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Port is required';
@@ -122,6 +143,8 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
               controller: _fingerprintController,
               decoration: const InputDecoration(
                 labelText: 'Device Fingerprint',
+                hintText: 'SHA-256 string',
+                prefixIcon: Icon(Icons.fingerprint),
               ),
               style: Theme.of(context).textTheme.bodySmall,
               validator: (value) {
@@ -135,12 +158,13 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
               },
             ),
             const SizedBox(height: 24),
-            FilledButton(
+            FilledButton.icon(
               onPressed: _onTrustAndConnect,
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: AppSizes.p4),
               ),
-              child: const Text('Trust & Add Device'),
+              icon: const Icon(Icons.verified_user),
+              label: const Text('Trust & Add Device'),
             ),
           ],
         ),

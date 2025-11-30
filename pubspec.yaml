@@ -32,6 +32,7 @@ dependencies:
   rust_lib_local_sync:
     path: rust_builder
   freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +43,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   freezed: ^3.2.3
+  json_serializable: ^6.11.2
 
 flutter:
   uses-material-design: true

@@ -1,34 +1,24 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-/// A simple, serializable model for QR code data.
-/// This is the "payload" we send in the QR code.
-@immutable
-class PairingData {
-  final String ip;
-  final int port;
-  final String fingerprint;
+part 'pairing_data.freezed.dart';
+part 'pairing_data.g.dart';
 
-  const PairingData({
-    required this.ip,
-    required this.port,
-    required this.fingerprint,
-  });
+@freezed
+abstract class PairingData with _$PairingData {
+  const factory PairingData({
+    /// The unique SHA-256 Fingerprint from the Identity Certificate.
+    required String deviceId,
 
-  Map<String, dynamic> toMap() {
-    return {'ip': ip, 'port': port, 'fingerprint': fingerprint};
-  }
+    /// The human-readable name (e.g. "Abhishek's Pixel").
+    required String alias,
 
-  factory PairingData.fromMap(Map<String, dynamic> map) {
-    return PairingData(
-      ip: map['ip'] as String,
-      port: map['port'] as int,
-      fingerprint: map['fingerprint'] as String,
-    );
-  }
+    /// The local IP address (e.g., 192.168.1.5).
+    required String ip,
 
-  String toJson() => json.encode(toMap());
+    /// The port the server is listening on (default: 45678).
+    required int port,
+  }) = _PairingData;
 
-  factory PairingData.fromJson(String source) =>
-      PairingData.fromMap(json.decode(source) as Map<String, dynamic>);
+  factory PairingData.fromJson(Map<String, dynamic> json) =>
+      _$PairingDataFromJson(json);
 }

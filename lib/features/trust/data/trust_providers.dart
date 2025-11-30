@@ -45,7 +45,7 @@ class TrustList extends _$TrustList {
   Future<void> addPeerFromPairingData(PairingData data, String peerName) async {
     final trustService = await ref.read(trustServiceProvider.future);
     final peer = TrustedPeer(
-      fingerprint: data.fingerprint,
+      fingerprint: data.deviceId,
       name: peerName,
       trustedAt: DateTime.now(),
     );

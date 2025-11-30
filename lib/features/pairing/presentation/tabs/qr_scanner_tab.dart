@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
@@ -42,7 +44,11 @@ class _QrScannerTabState extends ConsumerState<QrScannerTab> {
     }
 
     try {
-      final pairingData = PairingData.fromJson(barcode.rawValue!);
+      final Map<String, dynamic> decodedJson = jsonDecode(barcode.rawValue!);
+
+      final pairingData = PairingData.fromJson(decodedJson);
+
+      if (!mounted) return;
 
       // Show the TOFU confirmation dialog
       final bool? didTrust = await showDialog<bool>(
@@ -64,7 +70,7 @@ class _QrScannerTabState extends ConsumerState<QrScannerTab> {
                 style: Theme.of(context).textTheme.labelSmall,
               ),
               SelectableText(
-                pairingData.fingerprint,
+                pairingData.deviceId,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
