@@ -1,72 +1,100 @@
 use anyhow::Result;
+use bip39::Mnemonic;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use flutter_rust_bridge::frb;
-use rcgen::{string::Ia5String, CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
-use sha2::{Digest, Sha256};
-use time::{Duration, OffsetDateTime};
+use hkdf::Hkdf;
+use sha2::Sha256;
+use std::str::FromStr;
 
-#[frb(non_final)]
-pub struct LocalIdentity {
-    pub device_id: String,
-    pub device_name: String,
-    pub private_key_pem: String,
-    pub certificate_pem: String,
+#[frb(opaque)]
+pub struct NetworkIdentity {
+    /// Unique key for THIS device (TLS/Handshake)
+    pub(crate) node_signing_key: SigningKey,
+    pub(crate) node_verifying_key: VerifyingKey,
+
+    /// Shared key for the Cluster (Proof of Membership)
+    pub(crate) cluster_verifying_key: VerifyingKey,
+    // We keep the signing key private, but we need it once to generate the proof.
+    cluster_proof: Vec<u8>,
 }
 
-pub fn generate_identity(display_name: String) -> Result<LocalIdentity> {
-    // 1. Generate KeyPair (ECDSA P-256)
-    let key_pair = KeyPair::generate()?;
+impl NetworkIdentity {
+    pub fn from_mnemonic(phrase: &str, salt: &str) -> Result<Self> {
+        let mnemonic =
+            Mnemonic::from_str(phrase).map_err(|e| anyhow::anyhow!("Invalid mnemonic: {}", e))?;
+        let root_seed = mnemonic.to_seed("");
 
-    // 2. Configure Certificate
-    // Start with empty SANs to avoid auto-parsing errors in `new`
-    let mut params = CertificateParams::new(vec![])?;
+        // 1. Derive CLUSTER Key (Shared across all devices)
+        // No salt, so it's identical on every device.
+        let hkdf_cluster = Hkdf::<Sha256>::new(None, &root_seed);
+        let mut cluster_okm = [0u8; 32];
+        hkdf_cluster
+            .expand(b"localsync_cluster_identity_v1", &mut cluster_okm)
+            .map_err(|_| anyhow::anyhow!("Cluster key derivation failed"))?;
 
-    // Validity: 100 Years
-    let now = OffsetDateTime::now_utc();
-    params.not_before = now;
-    params.not_after = now + Duration::days(365 * 100);
+        let cluster_signing_key = SigningKey::from_bytes(&cluster_okm);
+        let cluster_verifying_key = cluster_signing_key.verifying_key();
 
-    // Distinguished Name (Common Name supports UTF-8)
-    params.distinguished_name = DistinguishedName::new();
-    params
-        .distinguished_name
-        .push(DnType::CommonName, &display_name);
-    params
-        .distinguished_name
-        .push(DnType::OrganizationName, "LocalSync P2P Mesh");
+        // 2. Derive NODE Key (Unique to this device)
+        // Uses the salt (UUID) to ensure uniqueness.
+        let hkdf_node = Hkdf::<Sha256>::new(Some(salt.as_bytes()), &root_seed);
+        let mut node_okm = [0u8; 32];
+        hkdf_node
+            .expand(b"localsync_node_identity_v1", &mut node_okm)
+            .map_err(|_| anyhow::anyhow!("Node key derivation failed"))?;
 
-    // 3. Configure Subject Alternative Names (DNS Names)
-    // These MUST be IA5String (Strict ASCII).
+        let node_signing_key = SigningKey::from_bytes(&node_okm);
+        let node_verifying_key = node_signing_key.verifying_key();
 
-    // Standard local fallback
-    let local_dns = Ia5String::try_from("localsync.local")?;
-    let mut sans = vec![SanType::DnsName(local_dns)];
+        // 3. Generate Cluster Proof (Self-Signed Certificate)
+        // We sign our own Node Public Key using the Cluster Private Key.
+        // Peer devices can verify this using their copy of the Cluster Public Key.
+        let proof_signature = cluster_signing_key.sign(node_verifying_key.as_bytes());
 
-    // Attempt to add the display name as a DNS SAN if it's valid ASCII.
-    // If user's name is "Jürgen's iPhone", this fails, so we skip adding it to SANs
-    // (It will still appear in the Common Name above).
-    if let Ok(ascii_name) = Ia5String::try_from(display_name.clone()) {
-        sans.push(SanType::DnsName(ascii_name));
+        Ok(Self {
+            node_signing_key,
+            node_verifying_key,
+            cluster_verifying_key,
+            cluster_proof: proof_signature.to_bytes().to_vec(),
+        })
     }
 
-    params.subject_alt_names = sans;
+    pub fn public_id(&self) -> String {
+        hex::encode(self.node_verifying_key.as_bytes())
+    }
 
-    // 4. Generate Certificate
-    let cert = params.self_signed(&key_pair)?;
+    /// Returns the proof that this Node belongs to the Cluster.
+    pub fn get_cluster_proof(&self) -> Vec<u8> {
+        self.cluster_proof.clone()
+    }
 
-    // 5. Export PEMs
-    let certificate_pem = cert.pem();
-    let private_key_pem = key_pair.serialize_pem();
+    /// Verifies that a peer's Node ID was signed by OUR Cluster Key.
+    pub fn verify_cluster_membership(&self, peer_node_id_hex: String, proof: Vec<u8>) -> bool {
+        let peer_bytes = match hex::decode(&peer_node_id_hex) {
+            Ok(b) => b,
+            Err(_) => return false,
+        };
 
-    // 6. Calculate Fingerprint
-    let mut hasher = Sha256::new();
-    hasher.update(cert.der());
-    let fingerprint_bytes = hasher.finalize();
-    let fingerprint = hex::encode(fingerprint_bytes);
+        let signature = match Signature::from_slice(&proof) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
 
-    Ok(LocalIdentity {
-        device_id: fingerprint,
-        device_name: display_name,
-        private_key_pem,
-        certificate_pem,
-    })
+        // We use OUR cluster key to verify THEIR proof.
+        // If it passes, they possess the same Mnemonic we do.
+        self.cluster_verifying_key
+            .verify(&peer_bytes, &signature)
+            .is_ok()
+    }
+}
+
+/// Generates a new 24-word BIP39 mnemonic.
+pub fn generate_mnemonic_words() -> String {
+    let mnemonic = Mnemonic::generate(24).expect("Failed to generate mnemonic");
+    mnemonic.to_string()
+}
+
+/// Validates if a string is a valid BIP39 mnemonic.
+pub fn validate_mnemonic_words(phrase: String) -> bool {
+    Mnemonic::parse(&phrase).is_ok()
 }

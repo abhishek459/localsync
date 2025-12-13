@@ -6,38 +6,32 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-Future<LocalIdentity> generateIdentity({required String displayName}) => RustLib
-    .instance
-    .api
-    .crateApiIdentityGenerateIdentity(displayName: displayName);
+/// Generates a new 24-word BIP39 mnemonic.
+Future<String> generateMnemonicWords() =>
+    RustLib.instance.api.crateApiIdentityGenerateMnemonicWords();
 
-class LocalIdentity {
-  final String deviceId;
-  final String deviceName;
-  final String privateKeyPem;
-  final String certificatePem;
+/// Validates if a string is a valid BIP39 mnemonic.
+Future<bool> validateMnemonicWords({required String phrase}) =>
+    RustLib.instance.api.crateApiIdentityValidateMnemonicWords(phrase: phrase);
 
-  const LocalIdentity({
-    required this.deviceId,
-    required this.deviceName,
-    required this.privateKeyPem,
-    required this.certificatePem,
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<NetworkIdentity>>
+abstract class NetworkIdentity implements RustOpaqueInterface {
+  static Future<NetworkIdentity> fromMnemonic({
+    required String phrase,
+    required String salt,
+  }) => RustLib.instance.api.crateApiIdentityNetworkIdentityFromMnemonic(
+    phrase: phrase,
+    salt: salt,
+  );
+
+  /// Returns the proof that this Node belongs to the Cluster.
+  Future<Uint8List> getClusterProof();
+
+  Future<String> publicId();
+
+  /// Verifies that a peer's Node ID was signed by OUR Cluster Key.
+  Future<bool> verifyClusterMembership({
+    required String peerNodeIdHex,
+    required List<int> proof,
   });
-
-  @override
-  int get hashCode =>
-      deviceId.hashCode ^
-      deviceName.hashCode ^
-      privateKeyPem.hashCode ^
-      certificatePem.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is LocalIdentity &&
-          runtimeType == other.runtimeType &&
-          deviceId == other.deviceId &&
-          deviceName == other.deviceName &&
-          privateKeyPem == other.privateKeyPem &&
-          certificatePem == other.certificatePem;
 }

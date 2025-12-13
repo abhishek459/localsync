@@ -1,4 +1,5 @@
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:local_sync/features/connection/data/connection_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:local_sync/features/discovery/application/discovery_service.dart';
 import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
@@ -12,21 +13,46 @@ DeviceInfoPlugin deviceInfo(Ref ref) {
   return DeviceInfoPlugin();
 }
 
-/// Manages the lifecycle of the DiscoveryService.
-/// This provider now asynchronously waits for the device identity to be ready.
 @Riverpod(keepAlive: true)
 Future<DiscoveryService> discoveryService(Ref ref) async {
-  // We depend on our device's identity to be ready.
-  final identity = await ref.watch(deviceIdentityProvider.future);
+  // Use Rust Identity
+  final identity = await ref.watch(networkIdentityProvider.future);
+
+  if (identity == null) {
+    throw Exception("Cannot start discovery: Identity not initialized.");
+  }
+
+  int port = await ref.watch(activePortProvider.future);
+
+  int retryCount = 0;
+  while (port == 0 && retryCount < 3) {
+    // Wait a moment before retrying
+    await Future.delayed(const Duration(seconds: 1));
+
+    // Force restart of the underlying connection service
+    ref.invalidate(connectionServiceProvider);
+    // Invalidate local cache of the port to ensure we get the fresh value
+    ref.invalidate(activePortProvider);
+
+    port = await ref.read(activePortProvider.future);
+    retryCount++;
+  }
+
+  if (port == 0) {
+    throw Exception(
+      "Cannot start discovery: Server port not ready after multiple restart attempts.",
+    );
+  }
+
   final deviceInfo = ref.watch(deviceInfoProvider);
 
-  // Identity is ready, create the real service.
-  final service = DiscoveryService(identity: identity, deviceInfo: deviceInfo);
+  final service = DiscoveryService(
+    identity: identity,
+    deviceInfo: deviceInfo,
+    port: port,
+  );
+  await service.startBroadcast();
 
-  // Start broadcasting immediately.
-  service.startBroadcast();
-
-  // Register a cleanup function to stop broadcasting when the provider is disposed.
   ref.onDispose(() {
     service.dispose();
   });

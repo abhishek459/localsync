@@ -21,7 +21,8 @@ class MasterKeyStorer extends _$MasterKeyStorer {
       final service = ref.read(masterKeyServiceProvider);
 
       // 1. Validate (this is crucial for the import flow)
-      if (!service.validateMnemonic(mnemonic)) {
+      final isValid = await service.validateMnemonic(mnemonic);
+      if (!isValid) {
         throw Exception(
           'Invalid mnemonic phrase. Please check the words and try again.',
         );

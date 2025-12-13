@@ -6,7 +6,6 @@ import 'package:local_sync/features/pairing/domain/show_my_info_state.dart';
 import 'package:local_sync/features/pairing/domain/pairing_data.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'pairing_providers.g.dart';
@@ -15,31 +14,33 @@ part 'pairing_providers.g.dart';
 @Riverpod(keepAlive: true)
 class PairingRequest extends _$PairingRequest {
   @override
-  bool build() {
-    return false;
-  }
-
-  void request() {
-    state = true;
-  }
-
-  void consume() {
-    state = false;
-  }
+  bool build() => false;
+  void request() => state = true;
+  void consume() => state = false;
 }
 
 /// A provider that securely fetches this device's complete pairing information.
 @riverpod
 Future<PairingData> myPairingData(Ref ref) async {
-  final identityFuture = ref.watch(deviceIdentityProvider.future);
-  final port = ref.watch(connectionPortProvider);
+  // 1. Get Crypto Identity (Rust)
+  final identity = await ref.watch(networkIdentityProvider.future);
+  if (identity == null) {
+    throw Exception("No identity found. Please log in with Master Key.");
+  }
 
-  // Handle Desktop vs Mobile IP fetching
+  // 2. Get Public ID (Hex String)
+  final publicId = await identity.publicId();
+
+  // 3. Get Device Alias (Human Name)
+  final identityService = await ref.watch(identityServiceProvider.future);
+  final alias = await identityService.getDeviceAlias();
+
+  // 4. Get Port
+  final port = await ref.watch(activePortProvider.future);
+
+  // 5. Get IP Address
   String? ip;
-
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    // On Desktop, use the robust dart:io NetworkInterface to find an IP.
-    // This works for Ethernet AND Wi-Fi.
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -72,12 +73,8 @@ Future<PairingData> myPairingData(Ref ref) async {
           return true;
         },
         // Fallback: If we filtered everything out, just take the first non-empty one
-        orElse: () => interfaces.firstWhere(
-          (i) => i.addresses.isNotEmpty,
-          orElse: () => throw Exception('No network interfaces found'),
-        ),
+        orElse: () => interfaces.firstWhere((i) => i.addresses.isNotEmpty),
       );
-
       ip = validInterface.addresses.first.address;
     } catch (e) {
       ip = null;
@@ -88,21 +85,13 @@ Future<PairingData> myPairingData(Ref ref) async {
     ip = await NetworkInfo().getWifiIP();
   }
 
-  final identity = await identityFuture;
-
   if (ip == null) {
     throw Exception(
-      'Unable to retrieve local IP address. '
-      'Please ensure you are connected to a network.',
+      'Unable to retrieve local IP address. Ensure you are connected to a network.',
     );
   }
 
-  return PairingData(
-    ip: ip,
-    port: port,
-    deviceId: identity.deviceId,
-    alias: identity.deviceName,
-  );
+  return PairingData(ip: ip, port: port, deviceId: publicId, alias: alias);
 }
 
 /// Notifier for managing the "Show My Info" screen state.
@@ -111,17 +100,10 @@ class ShowMyInfo extends _$ShowMyInfo {
   final LocalAuthentication _auth = LocalAuthentication();
 
   @override
-  ShowMyInfoState build() {
-    // This correctly returns the default state:
-    // ShowMyInfoState(status: ShowMyInfoStatus.unauthenticated)
-    return const ShowMyInfoState();
-  }
+  ShowMyInfoState build() => const ShowMyInfoState();
 
   Future<void> authenticate() async {
-    if (state.status == ShowMyInfoStatus.authenticating) {
-      return;
-    }
-
+    if (state.status == ShowMyInfoStatus.authenticating) return;
     state = state.copyWith(status: ShowMyInfoStatus.authenticating);
 
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
@@ -132,11 +114,7 @@ class ShowMyInfo extends _$ShowMyInfo {
     try {
       final bool canAuth =
           await _auth.canCheckBiometrics || await _auth.isDeviceSupported();
-      if (!canAuth) {
-        throw Exception(
-          'Local authentication is not available on this device.',
-        );
-      }
+      if (!canAuth) throw Exception('Local authentication not available.');
 
       final bool didAuthenticate = await _auth.authenticate(
         localizedReason:
@@ -144,17 +122,10 @@ class ShowMyInfo extends _$ShowMyInfo {
       );
 
       if (!ref.mounted) return;
-
-      if (didAuthenticate) {
-        state = state.copyWith(status: ShowMyInfoStatus.success);
-      } else {
-        state = state.copyWith(status: ShowMyInfoStatus.unauthenticated);
-      }
-    } on PlatformException catch (e) {
-      if (!ref.mounted) return;
       state = state.copyWith(
-        status: ShowMyInfoStatus.error,
-        errorMessage: e.message ?? 'Authentication failed',
+        status: didAuthenticate
+            ? ShowMyInfoStatus.success
+            : ShowMyInfoStatus.unauthenticated,
       );
     } catch (e) {
       if (!ref.mounted) return;

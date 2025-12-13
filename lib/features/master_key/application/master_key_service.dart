@@ -1,5 +1,5 @@
-import 'package:blockchain_utils/blockchain_utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_sync/src/rust/api/identity.dart';
 
 /// Handles the business logic for creating, importing, and storing
 /// the user's master mnemonic phrase.
@@ -12,16 +12,13 @@ class MasterKeyService {
 
   /// Generates a new 24-word (256-bit) BIP39 mnemonic.
   /// This does NOT store the mnemonic.
-  String generateMnemonic() {
-    final mnemonic = Bip39MnemonicGenerator().fromWordsNumber(
-      Bip39WordsNum.wordsNum24,
-    );
-    return mnemonic.toList().join(' ');
+  Future<String> generateMnemonic() async {
+    return generateMnemonicWords();
   }
 
   /// Validates a given mnemonic phrase.
-  bool validateMnemonic(String mnemonic) {
-    return Bip39MnemonicValidator().isValid(mnemonic);
+  Future<bool> validateMnemonic(String mnemonic) {
+    return validateMnemonicWords(phrase: mnemonic);
   }
 
   /// Securely persists the mnemonic to the device's keychain.

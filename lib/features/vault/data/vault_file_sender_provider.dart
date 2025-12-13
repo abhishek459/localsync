@@ -37,6 +37,11 @@ class VaultFileSender extends _$VaultFileSender {
       final connectionService = await ref.read(
         connectionServiceProvider.future,
       );
+
+      if (connectionService == null) {
+        throw Exception("Networking service not ready or not logged in.");
+      }
+
       final repository = await ref.read(vaultRepositoryProvider.future);
       final appDocsDir = await ref.read(appDocumentsDirectoryProvider.future);
       final uuid = ref.read(uuidProvider);
@@ -49,7 +54,6 @@ class VaultFileSender extends _$VaultFileSender {
       final destinationPath = p.join(vaultDir.path, fileId);
 
       // 2. Encrypt to Disk (Phase 1)
-      // This produces the full encrypted file locally first.
       final encryptedFile = await encryptionService.encryptFile(
         inputPath: path,
         outputPath: destinationPath,
@@ -70,66 +74,61 @@ class VaultFileSender extends _$VaultFileSender {
       final startJson = utf8.encode(jsonEncode(startMetadata));
       final startPacketBuilder = BytesBuilder();
 
-      // Frame: [Type] [Len] [Payload]
       startPacketBuilder.addByte(MessageType.transferStart.value);
-
       final lenBytes = ByteData(4)..setUint32(0, startJson.length);
       startPacketBuilder.add(lenBytes.buffer.asUint8List());
       startPacketBuilder.add(startJson);
 
-      // Note: We need to frame the *entire* message for the PacketReassembler
-      // The PacketReassembler expects: [TotalFrameLen] [Body]
       final startPayload = startPacketBuilder.toBytes();
       final startFrameHeader = ByteData(4)..setUint32(0, startPayload.length);
 
-      await connectionService.broadcast(
-        Uint8List.fromList([
+      // Send Start Frame
+      await connectionService.broadcastStream(
+        header: Uint8List.fromList([
           ...startFrameHeader.buffer.asUint8List(),
           ...startPayload,
         ]),
+        totalSize: 0,
+        dataStreamFactory: () => const Stream.empty(),
       );
 
-      // 4. Send Chunks Loop
+      // 4. Send Chunks Loop (Using simpler logic)
       final fileStream = fileOnDisk.openRead();
+      final fileIdBytes = utf8.encode(fileId);
+      final fileIdLen = fileIdBytes.length;
       int bytesSent = 0;
 
-      // We read large chunks from disk, but we might want to ensure they
-      // fit our maxChunkSize protocol limit.
-      // File.openRead() usually yields ~64kb chunks, which is fine.
       await for (final chunk in fileStream) {
-        // Prepare the Chunk Packet Payload
-        // Format: [Type (1)] [FileId Len (4)] [FileId (N)] [Data]
-        // *Optimization*: Since FileID is fixed UUID (36 chars), we can hardcode len or just send bytes.
-        // Let's stick to a robust parser:
-        // [Type: transferChunk] [FileId (36 bytes ASCII)] [Data]
-
         final chunkBuilder = BytesBuilder();
+
+        // [Type (1)] [FileId Len (1)] [FileId (N)] [Data (N)]
         chunkBuilder.addByte(MessageType.transferChunk.value);
-
-        // File ID (UUID is 36 bytes)
-        final fileIdBytes = utf8.encode(fileId);
-        // We assume ID is always 36 bytes for now, or we prefix len.
-        // Let's prefix len to be safe.
-        chunkBuilder.addByte(fileIdBytes.length); // 1 byte len is enough for ID
+        chunkBuilder.addByte(fileIdLen);
         chunkBuilder.add(fileIdBytes);
-
-        // Data
         chunkBuilder.add(chunk);
 
         final chunkPayload = chunkBuilder.toBytes();
 
-        // Wrap in TCP Frame for Reassembler
-        final tcpFrameHeader = ByteData(4)..setUint32(0, chunkPayload.length);
-        final fullTcpFrame = BytesBuilder();
-        fullTcpFrame.add(tcpFrameHeader.buffer.asUint8List());
-        fullTcpFrame.add(chunkPayload);
+        // Frame Header [Len (4)]
+        final frameHeader = ByteData(4)..setUint32(0, chunkPayload.length);
 
-        await connectionService.broadcast(fullTcpFrame.toBytes());
+        final fullFrame = BytesBuilder();
+        fullFrame.add(frameHeader.buffer.asUint8List());
+        fullFrame.add(chunkPayload);
+
+        // We use broadcastStream here effectively as a simple "send"
+        // by wrapping this single frame in a stream.
+        // This reuses the logic in ConnectionService without needing a separate 'broadcast' method.
+        await connectionService.broadcastStream(
+          header: fullFrame.toBytes(),
+          totalSize: 0,
+          dataStreamFactory: () => const Stream.empty(),
+        );
 
         bytesSent += chunk.length;
         ref
             .read(transferProgressProvider.notifier)
-            .setProgress(bytesSent / totalSize);
+            .setProgress((bytesSent / totalSize).clamp(0.0, 1.0));
       }
 
       // 5. Finalize Local Record
@@ -141,8 +140,6 @@ class VaultFileSender extends _$VaultFileSender {
       );
 
       ref.invalidate(vaultFilesProvider);
-
-      // UI Polish: smooth finish
       await Future.delayed(const Duration(milliseconds: 500));
       ref.read(transferProgressProvider.notifier).setProgress(0.0);
     });

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:basic_utils/basic_utils.dart';
-import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
-import 'package:local_sync/features/identity/domain/device_identity.dart';
+import 'dart:math';
+
+import 'package:local_sync/src/rust/api/identity.dart';
+import 'package:local_sync/src/rust/api/trust.dart';
 import 'package:local_sync/features/transport/message_router.dart';
 import 'package:local_sync/features/transport/transport_protocol.dart';
+import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
 
 typedef TrustValidator = bool Function(String fingerprint);
 
@@ -28,14 +30,10 @@ class PacketReassembler {
     while (true) {
       // 1. Do we have enough bytes to read the length header? (4 bytes)
       if (_expectedLength == null) {
-        if (_buffer.length < 4) {
-          break; // Not enough data yet to know the length
-        }
+        if (_buffer.length < 4) break;
         // Read the first 4 bytes as the 32-bit integer length
         final bufferBytes = _buffer.toBytes();
-        final lengthHeader = ByteData.sublistView(bufferBytes, 0, 4);
-        _expectedLength = lengthHeader.getUint32(0);
-
+        _expectedLength = ByteData.sublistView(bufferBytes, 0, 4).getUint32(0);
         // Remove the 4 length bytes from the buffer
         _buffer.clear();
         _buffer.add(bufferBytes.sublist(4));
@@ -43,15 +41,10 @@ class PacketReassembler {
 
       // 2. Do we have the full message body?
       if (_expectedLength != null) {
-        if (_buffer.length < _expectedLength!) {
-          break; // Still waiting for the rest of the payload
-        }
-
+        if (_buffer.length < _expectedLength!) break;
         // We have a full message! Extract it.
         final bufferBytes = _buffer.toBytes();
-        final message = bufferBytes.sublist(0, _expectedLength!);
-        messages.add(message);
-
+        messages.add(bufferBytes.sublist(0, _expectedLength!));
         // Put the remaining bytes (if any) back into the buffer
         final remaining = bufferBytes.sublist(_expectedLength!);
         _buffer.clear();
@@ -66,11 +59,13 @@ class PacketReassembler {
 }
 
 class ConnectionService {
-  final DeviceIdentity _identity;
+  final NetworkIdentity _identity;
   final TrustValidator _isTrusted;
   final MessageRouter _messageRouter;
   SecureServerSocket? _server;
   final SecurityContext _securityContext;
+  int _listeningPort = 0;
+  int get listeningPort => _listeningPort;
 
   /// A map of all active, trusted connections.
   /// We store the [SecureSocket] to send data and the [PacketReassembler]
@@ -78,159 +73,180 @@ class ConnectionService {
   final Map<String, MapEntry<SecureSocket, PacketReassembler>>
   _activeConnections = {};
 
-  /// Keeps track of sockets that have connected but haven't sent their identity yet.
-  final Set<SecureSocket> _unauthenticatedSockets = {};
+  // Handshake State
+  final Map<SecureSocket, Uint8List> _pendingChallenges = {};
+  final Map<SecureSocket, String> _pendingIncomingAuth = {};
+  final Map<SecureSocket, String> _pendingOutgoingAuth = {};
 
-  ConnectionService({
-    required DeviceIdentity identity,
+  ConnectionService._(
+    this._identity,
+    this._isTrusted,
+    this._messageRouter,
+    this._securityContext,
+  );
+
+  static Future<ConnectionService> create({
+    required NetworkIdentity identity,
     required TrustValidator isTrusted,
     required MessageRouter messageRouter,
-  }) : _identity = identity,
-       _isTrusted = isTrusted,
-       _messageRouter = messageRouter,
-       _securityContext = SecurityContext() {
-    try {
-      final certBytes = Uint8List.fromList(
-        utf8.encode(_identity.publicCertPem),
-      );
-      final keyBytes = Uint8List.fromList(utf8.encode(_identity.privateKeyPem));
+  }) async {
+    final tlsConfig = await generateEphemeralCert();
+    final context = SecurityContext(withTrustedRoots: true);
+    // 1. Load our Identity (Certificate Chain + Private Key)
+    // This is used by the Server to prove its identity to clients.
+    context.useCertificateChainBytes(utf8.encode(tlsConfig.certPem));
+    context.usePrivateKeyBytes(utf8.encode(tlsConfig.keyPem));
 
-      // 1. Load our Identity (Certificate Chain + Private Key)
-      // This is used by the Server to prove its identity to clients.
-      _securityContext.useCertificateChainBytes(certBytes);
-      _securityContext.usePrivateKeyBytes(keyBytes);
-    } catch (e) {
-      // Log error loading security context if necessary
-      print('Error loading security context: $e');
-    }
-  }
-
-  /// Helper to calculate fingerprint from a raw PEM string
-  String _getFingerprintFromCertPem(String pem) {
-    try {
-      final certData = X509Utils.x509CertificateFromPem(pem);
-      return certData.sha256Thumbprint!.replaceAll(':', '').toLowerCase();
-    } catch (e) {
-      return '';
-    }
-  }
-
-  /// Helper to calculate fingerprint from a TLS Certificate object
-  String _getFingerprintFromCert(X509Certificate cert) {
-    return _getFingerprintFromCertPem(cert.pem);
+    return ConnectionService._(identity, isTrusted, messageRouter, context);
   }
 
   Future<void> startServer() async {
     if (_server != null) return;
 
-    try {
-      _server = await SecureServerSocket.bind(
-        InternetAddress.anyIPv4,
-        45678,
-        _securityContext,
-        requireClientCertificate: false,
-        requestClientCertificate: false,
-      );
+    int retryCount = 0;
+    const maxRetries = 3;
 
-      _server?.listen(
-        (SecureSocket socket) {
-          _handleSocketStream(socket);
-        },
-        onError: (error) {
-          print('Server Listen Error: $error');
-        },
-      );
-    } catch (e) {
-      print('Failed to start server: $e');
+    while (retryCount < maxRetries) {
+      try {
+        _server = await SecureServerSocket.bind(
+          InternetAddress.anyIPv4,
+          0,
+          _securityContext,
+          requestClientCertificate: false,
+          shared: true,
+        );
+        _listeningPort = _server!.port;
+
+        _server?.listen(
+          (SecureSocket socket) => _handleSocketStream(socket),
+          onError: (e) => print("❌ Server Socket Error: $e"),
+          onDone: () => print("❌ Server Socket Closed"),
+        );
+        return;
+      } catch (e) {
+        print("⚠️ Bind attempt failed: $e");
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          print(
+            "🔥 CRITICAL: Failed to bind port $listeningPort after $maxRetries attempts.",
+          );
+        } else {
+          await Future.delayed(Duration(milliseconds: 1000 * retryCount));
+        }
+      }
     }
   }
 
-  /// Unified handler for managing the socket lifecycle, reassembly, and auth state.
-  void _handleSocketStream(SecureSocket socket, {String? preKnownFingerprint}) {
-    bool isAuthenticated = preKnownFingerprint != null;
-    String? fingerprint = preKnownFingerprint;
-
-    // Create a reassembler specific to this socket stream
+  void _handleSocketStream(SecureSocket socket) {
     final reassembler = PacketReassembler();
 
-    if (isAuthenticated) {
-      _activeConnections[fingerprint!] = MapEntry(socket, reassembler);
-    } else {
-      _unauthenticatedSockets.add(socket);
-
-      // Security: Enforce a 10-second timeout for authentication.
-      Future.delayed(const Duration(seconds: 10), () {
-        if (!isAuthenticated && _unauthenticatedSockets.contains(socket)) {
-          socket.destroy();
-          _unauthenticatedSockets.remove(socket);
-        }
-      });
-    }
-
     socket.listen(
-      (List<int> data) {
-        if (data.isEmpty) return;
-        final chunk = Uint8List.fromList(data);
-
-        // Feed the raw chunk into the reassembler
-        final messages = reassembler.processChunk(chunk);
-
-        // Process all complete messages found in this chunk
-        for (final message in messages) {
-          _processCompleteMessage(
-            socket,
-            reassembler,
-            message,
-            isAuthenticated,
-            fingerprint,
-            (newFingerprint) {
-              // Callback when authentication succeeds
-              isAuthenticated = true;
-              fingerprint = newFingerprint;
-              _unauthenticatedSockets.remove(socket);
-              _activeConnections[fingerprint!] = MapEntry(socket, reassembler);
-            },
-          );
+      (data) {
+        final messages = reassembler.processChunk(Uint8List.fromList(data));
+        for (final msg in messages) {
+          _processMessage(socket, msg);
         }
       },
-      onError: (dynamic error) {
-        _cleanupSocket(socket, fingerprint);
+      onError: (e) {
+        print("⚠️ Socket Error (${socket.remoteAddress.address}): $e");
+        _cleanupSocket(socket);
       },
       onDone: () {
-        _cleanupSocket(socket, fingerprint);
+        _cleanupSocket(socket);
       },
     );
   }
 
-  /// Handles a single, complete, reassembled message.
-  void _processCompleteMessage(
-    SecureSocket socket,
-    PacketReassembler reassembler,
-    Uint8List message,
-    bool isAuthenticated,
-    String? fingerprint,
-    Function(String) onAuthSuccess,
-  ) {
-    // --- AUTHENTICATION PHASE ---
-    if (!isAuthenticated) {
-      // We only accept an AUTH packet (0x03) here.
-      if (message.isNotEmpty && message[0] == MessageType.auth.value) {
-        try {
-          // Payload is the PEM string bytes
-          final pemBytes = message.sublist(1);
-          final pemString = utf8.decode(pemBytes);
-          final claimedFingerprint = _getFingerprintFromCertPem(pemString);
+  Future<void> _processMessage(SecureSocket socket, Uint8List message) async {
+    if (message.isEmpty) return;
+    final typeByte = message[0];
+    final type = MessageType.values.firstWhere(
+      (e) => e.value == typeByte,
+      orElse: () => MessageType.unknown,
+    );
+    final payload = message.sublist(1);
 
-          // Check if this fingerprint is in our Trust Database
-          if (_isTrusted(claimedFingerprint)) {
-            onAuthSuccess(claimedFingerprint);
-          } else {
-            socket.write('REJECTED\n');
-            socket.destroy();
-          }
-        } catch (e) {
-          socket.destroy();
-        }
+    // --- HANDSHAKE LOGIC ---
+
+    if (type == MessageType.authHello) {
+      final peerId = utf8.decode(payload);
+
+      _pendingIncomingAuth[socket] = peerId;
+      final challenge = _generateRandomChallenge();
+      _pendingChallenges[socket] = challenge;
+      _sendFrame(socket, MessageType.authChallenge, challenge);
+      return;
+    }
+
+    if (type == MessageType.authChallenge) {
+      // Step A: Sign the random challenge (Proves we own our Node ID)
+      final challengeSignature = await signChallenge(
+        identity: _identity,
+        challenge: payload,
+      );
+
+      // Step B: Get our Cluster Proof (Proves we own the Master Key)
+      final clusterProof = await _identity.getClusterProof();
+
+      // Step C: Combine them.
+      // Signature is always 64 bytes (Ed25519). Proof is 64 bytes.
+      final combinedPayload = Uint8List.fromList([
+        ...challengeSignature,
+        ...clusterProof,
+      ]);
+
+      _sendFrame(socket, MessageType.authResponse, combinedPayload);
+      return;
+    }
+
+    if (type == MessageType.authResponse) {
+      final challenge = _pendingChallenges[socket];
+      final peerId = _pendingIncomingAuth[socket];
+
+      if (challenge == null || peerId == null) {
+        /* Error handling */
+        return;
+      }
+
+      // We expect at least 64 bytes (Signature).
+      // If 128 bytes, it includes Cluster Proof.
+      if (payload.length < 64) {
+        /* Error */
+        return;
+      }
+
+      final signatureBytes = payload.sublist(0, 64);
+      final hasProof = payload.length >= 128;
+
+      // 1. Verify Node Ownership (Challenge Signature)
+      final isSignatureValid = await verifyResponse(
+        publicKeyHex: peerId,
+        challenge: challenge,
+        signatureBytes: signatureBytes,
+      );
+
+      // 2. Check Explicit Trust (Database)
+      final isExplicitlyTrusted = _isTrusted(peerId);
+
+      // 3. Check Cluster Trust (Auto-Connect)
+      bool isClusterMember = false;
+      if (hasProof) {
+        final proofBytes = payload.sublist(64, 128);
+        isClusterMember = await _identity.verifyClusterMembership(
+          peerNodeIdHex: peerId,
+          proof: proofBytes,
+        );
+      }
+
+      final isAuthorized =
+          isSignatureValid && (isExplicitlyTrusted || isClusterMember);
+
+      if (isAuthorized) {
+        _activeConnections[peerId] = MapEntry(socket, PacketReassembler());
+        _pendingChallenges.remove(socket);
+        _pendingIncomingAuth.remove(socket);
+
+        _sendFrame(socket, MessageType.authAck, []);
       } else {
         // Received non-auth packet while unauthenticated
         socket.destroy();
@@ -238,18 +254,24 @@ class ConnectionService {
       return;
     }
 
-    // --- ESTABLISHED PHASE ---
-    if (fingerprint != null) {
-      // Pass the valid, reassembled message to the router
-      _messageRouter.handleData(message, fingerprint);
+    // Handle Auth Ack (Client Side)
+    if (type == MessageType.authAck) {
+      final peerId = _pendingOutgoingAuth[socket];
+      if (peerId != null) {
+        _activeConnections[peerId] = MapEntry(socket, PacketReassembler());
+        _pendingOutgoingAuth.remove(socket);
+      }
+      return;
     }
-  }
 
-  void _cleanupSocket(SecureSocket socket, String? fingerprint) {
-    socket.destroy();
-    _unauthenticatedSockets.remove(socket);
-    if (fingerprint != null) {
-      _activeConnections.remove(fingerprint);
+    // --- DATA LOGIC (Authenticated Only) ---
+    final entry = _activeConnections.entries.firstWhere(
+      (e) => e.value.key == socket,
+      orElse: () => MapEntry('', MapEntry(socket, PacketReassembler())),
+    );
+
+    if (entry.key.isNotEmpty) {
+      _messageRouter.handleData(message, entry.key);
     }
   }
 
@@ -259,138 +281,94 @@ class ConnectionService {
     }
 
     try {
-      // 1. Establish TLS Tunnel (Client Side)
       final socket = await SecureSocket.connect(
         peer.host,
         peer.port,
-        onBadCertificate: (X509Certificate cert) {
-          final fp = _getFingerprintFromCert(cert);
-          final trusted = (fp == peer.id) || _isTrusted(fp);
-          return trusted;
-        },
+        onBadCertificate: (_) => true,
+        timeout: const Duration(seconds: 5),
       );
 
-      // Send our Identity (Auth Packet) immediately.
-      // We MUST frame this with the 4-byte length header so the receiver's
-      // PacketReassembler can handle it correctly.
-      final authPayloadBuilder = BytesBuilder();
-      authPayloadBuilder.addByte(MessageType.auth.value);
-      authPayloadBuilder.add(utf8.encode(_identity.publicCertPem));
-      final payload = authPayloadBuilder.toBytes();
+      // NEW: Track this socket as an outgoing attempt to this Peer ID
+      _pendingOutgoingAuth[socket] = peer.id;
 
-      final frameBuilder = BytesBuilder();
-      final lengthData = ByteData(4)..setUint32(0, payload.length);
-      frameBuilder.add(lengthData.buffer.asUint8List());
-      frameBuilder.add(payload);
+      _handleSocketStream(socket);
 
-      socket.add(frameBuilder.toBytes());
-      await socket.flush();
-
-      // 3. Register the connection
-      // We treat this as authenticated immediately because we performed the
-      // verification in `onBadCertificate`.
-      _handleSocketStream(socket, preKnownFingerprint: peer.id);
+      final myId = await _identity.publicId();
+      _sendFrame(socket, MessageType.authHello, utf8.encode(myId));
     } catch (e) {
-      print('Failed to connect to peer ${peer.id}: $e');
+      print("🔥 Connect Error (${peer.host}): $e");
     }
   }
 
-  /// Sends a raw byte payload to all connected and trusted peers.
-  /// NOTE: The `data` passed here MUST already be framed (have the length header)
-  /// by the caller (e.g., VaultFileSender).
-  Future<void> broadcast(Uint8List data) async {
-    if (_activeConnections.isEmpty) {
-      return;
-    }
+  void _sendFrame(SecureSocket socket, MessageType type, List<int> payload) {
+    final builder = BytesBuilder();
+    final totalLen = 1 + payload.length;
 
-    final List<String> disconnectedPeers = [];
+    final lenData = ByteData(4)..setUint32(0, totalLen);
+    builder.add(lenData.buffer.asUint8List());
+    builder.addByte(type.value);
+    builder.add(payload);
 
-    for (final entry in _activeConnections.entries) {
-      final fingerprint = entry.key;
-      final socket = entry.value.key; // The SecureSocket is the key in MapEntry
-
-      try {
-        socket.add(data);
-        await socket.flush();
-      } catch (e) {
-        disconnectedPeers.add(fingerprint);
-      }
-    }
-
-    for (final fingerprint in disconnectedPeers) {
-      // We can't easily access the socket to clean up by ID here without map lookup
-      if (_activeConnections.containsKey(fingerprint)) {
-        _cleanupSocket(_activeConnections[fingerprint]!.key, fingerprint);
-      }
-    }
+    socket.add(builder.toBytes());
   }
 
-  /// Sends a stream of data to all connected and trusted peers.
-  ///
-  /// [header] is sent first (e.g. framing + metadata).
-  /// [dataStreamFactory] is a callback that produces a [Stream] of the file content.
-  /// We need a factory because we must create a fresh stream for each peer socket.
+  Uint8List _generateRandomChallenge() {
+    final rnd = Random.secure();
+    return Uint8List.fromList(List.generate(32, (_) => rnd.nextInt(256)));
+  }
+
+  void _cleanupSocket(SecureSocket socket) {
+    _activeConnections.removeWhere((key, value) => value.key == socket);
+    _pendingChallenges.remove(socket);
+    _pendingIncomingAuth.remove(socket);
+    _pendingOutgoingAuth.remove(socket);
+    socket.destroy();
+  }
+
   Future<void> broadcastStream({
     required Uint8List header,
     required Stream<List<int>> Function() dataStreamFactory,
     required int totalSize,
     void Function(int sent)? onProgress,
   }) async {
-    if (_activeConnections.isEmpty) return;
+    if (_activeConnections.isEmpty) {
+      // Don't return, maybe we want to queue?
+      // For now, let's just return to avoid crashes.
+      return;
+    }
 
-    final List<String> disconnectedPeers = [];
+    final List<String> disconnected = [];
     final List<Future<void>> tasks = [];
-
-    // Track bytes sent for progress reporting.
-    // Note: If sending to multiple peers, we report "100%" when ONE peer finishes
-    // or average them? Simplest is to track the *first* peer's progress for UI.
-    int bytesSentSoFar = 0;
-
-    // Header is sent immediately, count it.
-    bytesSentSoFar += header.length;
+    int bytesSentSoFar = header.length;
 
     for (final entry in _activeConnections.entries) {
-      final fingerprint = entry.key;
+      final fp = entry.key;
       final socket = entry.value.key;
-
       tasks.add(
         Future(() async {
           try {
-            // 1. Write the header
             socket.add(header);
-
-            // 2. Prepare the stream with progress tracking
             Stream<List<int>> stream = dataStreamFactory();
-
-            // Only the first task updates the global progress UI to avoid flickering
-            bool isPrimaryTracker = (tasks.isEmpty);
-
+            bool isPrimary = tasks.isEmpty;
             stream = stream.map((chunk) {
-              if (isPrimaryTracker) {
+              if (isPrimary) {
                 bytesSentSoFar += chunk.length;
                 onProgress?.call(bytesSentSoFar);
               }
               return chunk;
             });
-
-            // 3. Pipe the stream
             await socket.addStream(stream);
             await socket.flush();
           } catch (e) {
-            disconnectedPeers.add(fingerprint);
+            disconnected.add(fp);
           }
         }),
       );
     }
-
     await Future.wait(tasks);
-    _cleanupDisconnectedPeers(disconnectedPeers);
-  }
-
-  void _cleanupDisconnectedPeers(List<String> peers) {
-    for (final fingerprint in peers) {
-      if (_activeConnections.containsKey(fingerprint)) {
-        _cleanupSocket(_activeConnections[fingerprint]!.key, fingerprint);
+    for (var fp in disconnected) {
+      if (_activeConnections.containsKey(fp)) {
+        _cleanupSocket(_activeConnections[fp]!.key);
       }
     }
   }
@@ -398,13 +376,9 @@ class ConnectionService {
   void dispose() {
     _server?.close();
     _server = null;
-    for (final entry in _activeConnections.values) {
-      entry.key.destroy(); // Destroy socket
-    }
-    for (final socket in _unauthenticatedSockets) {
-      socket.destroy();
+    for (var e in _activeConnections.values) {
+      e.key.destroy();
     }
     _activeConnections.clear();
-    _unauthenticatedSockets.clear();
   }
 }

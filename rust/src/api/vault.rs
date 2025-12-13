@@ -1,15 +1,18 @@
 use anyhow::{Context, Result};
+use bip39::Mnemonic;
 use byteorder::{ByteOrder, LittleEndian};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
     Key, XChaCha20Poly1305, XNonce,
 };
 use flutter_rust_bridge::frb;
-use std::fs::File;
+use hkdf::Hkdf;
+use sha2::Sha256;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::{fs::File, str::FromStr};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-const CHUNK_SIZE: usize = 16 * 1024 * 1024; // 16MB chunks
+const CHUNK_SIZE: usize = 2 * 1024 * 1024; // 2MB chunks
 const TAG_SIZE: usize = 16; // Poly1305 MAC tag size
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -161,4 +164,17 @@ pub fn decrypt_file_stream(
     std::fs::rename(&temp_path, &output_path)?;
 
     Ok(())
+}
+
+pub fn derive_vault_key(mnemonic: String) -> Result<Vec<u8>> {
+    let mnemonic =
+        Mnemonic::from_str(&mnemonic).map_err(|e| anyhow::anyhow!("Invalid mnemonic: {}", e))?;
+    let root_seed = mnemonic.to_seed("");
+
+    let hkdf = Hkdf::<Sha256>::new(None, &root_seed);
+    let mut key = [0u8; 32];
+    hkdf.expand(b"localsync_vault_aes_v1", &mut key)
+        .map_err(|_| anyhow::anyhow!("Derivation failed"))?;
+
+    Ok(key.to_vec())
 }

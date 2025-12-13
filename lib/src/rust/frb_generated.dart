@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/identity.dart';
+import 'api/trust.dart';
 import 'api/vault.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -65,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -993605837;
+  int get rustContentHash => 1993103111;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -76,6 +77,25 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<NetworkIdentity> crateApiIdentityNetworkIdentityFromMnemonic({
+    required String phrase,
+    required String salt,
+  });
+
+  Future<Uint8List> crateApiIdentityNetworkIdentityGetClusterProof({
+    required NetworkIdentity that,
+  });
+
+  Future<String> crateApiIdentityNetworkIdentityPublicId({
+    required NetworkIdentity that,
+  });
+
+  Future<bool> crateApiIdentityNetworkIdentityVerifyClusterMembership({
+    required NetworkIdentity that,
+    required String peerNodeIdHex,
+    required List<int> proof,
+  });
+
   Future<void> crateApiVaultDecryptFileStream({
     required String inputPath,
     required String outputPath,
@@ -83,15 +103,39 @@ abstract class RustLibApi extends BaseApi {
     required List<int> keyBytes,
   });
 
+  Future<Uint8List> crateApiVaultDeriveVaultKey({required String mnemonic});
+
   Future<EncryptionResult> crateApiVaultEncryptFileStream({
     required String inputPath,
     required String outputPath,
     required List<int> keyBytes,
   });
 
-  Future<LocalIdentity> crateApiIdentityGenerateIdentity({
-    required String displayName,
+  Future<TlsConfig> crateApiTrustGenerateEphemeralCert();
+
+  Future<String> crateApiIdentityGenerateMnemonicWords();
+
+  Future<Uint8List> crateApiTrustSignChallenge({
+    required NetworkIdentity identity,
+    required List<int> challenge,
   });
+
+  Future<bool> crateApiIdentityValidateMnemonicWords({required String phrase});
+
+  Future<bool> crateApiTrustVerifyResponse({
+    required String publicKeyHex,
+    required List<int> challenge,
+    required List<int> signatureBytes,
+  });
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_NetworkIdentity;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_NetworkIdentity;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_NetworkIdentityPtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -101,6 +145,156 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  Future<NetworkIdentity> crateApiIdentityNetworkIdentityFromMnemonic({
+    required String phrase,
+    required String salt,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(phrase, serializer);
+          sse_encode_String(salt, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiIdentityNetworkIdentityFromMnemonicConstMeta,
+        argValues: [phrase, salt],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentityNetworkIdentityFromMnemonicConstMeta =>
+      const TaskConstMeta(
+        debugName: "NetworkIdentity_from_mnemonic",
+        argNames: ["phrase", "salt"],
+      );
+
+  @override
+  Future<Uint8List> crateApiIdentityNetworkIdentityGetClusterProof({
+    required NetworkIdentity that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiIdentityNetworkIdentityGetClusterProofConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentityNetworkIdentityGetClusterProofConstMeta =>
+      const TaskConstMeta(
+        debugName: "NetworkIdentity_get_cluster_proof",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<String> crateApiIdentityNetworkIdentityPublicId({
+    required NetworkIdentity that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiIdentityNetworkIdentityPublicIdConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentityNetworkIdentityPublicIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "NetworkIdentity_public_id",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<bool> crateApiIdentityNetworkIdentityVerifyClusterMembership({
+    required NetworkIdentity that,
+    required String peerNodeIdHex,
+    required List<int> proof,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+            that,
+            serializer,
+          );
+          sse_encode_String(peerNodeIdHex, serializer);
+          sse_encode_list_prim_u_8_loose(proof, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta:
+            kCrateApiIdentityNetworkIdentityVerifyClusterMembershipConstMeta,
+        argValues: [that, peerNodeIdHex, proof],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiIdentityNetworkIdentityVerifyClusterMembershipConstMeta =>
+      const TaskConstMeta(
+        debugName: "NetworkIdentity_verify_cluster_membership",
+        argNames: ["that", "peerNodeIdHex", "proof"],
+      );
 
   @override
   Future<void> crateApiVaultDecryptFileStream({
@@ -120,7 +314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 5,
             port: port_,
           );
         },
@@ -142,6 +336,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<Uint8List> crateApiVaultDeriveVaultKey({required String mnemonic}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mnemonic, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiVaultDeriveVaultKeyConstMeta,
+        argValues: [mnemonic],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultDeriveVaultKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "derive_vault_key",
+        argNames: ["mnemonic"],
+      );
+
+  @override
   Future<EncryptionResult> crateApiVaultEncryptFileStream({
     required String inputPath,
     required String outputPath,
@@ -157,7 +382,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 7,
             port: port_,
           );
         },
@@ -179,37 +404,171 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<LocalIdentity> crateApiIdentityGenerateIdentity({
-    required String displayName,
-  }) {
+  Future<TlsConfig> crateApiTrustGenerateEphemeralCert() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(displayName, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 8,
             port: port_,
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_local_identity,
+          decodeSuccessData: sse_decode_tls_config,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kCrateApiIdentityGenerateIdentityConstMeta,
-        argValues: [displayName],
+        constMeta: kCrateApiTrustGenerateEphemeralCertConstMeta,
+        argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIdentityGenerateIdentityConstMeta =>
+  TaskConstMeta get kCrateApiTrustGenerateEphemeralCertConstMeta =>
+      const TaskConstMeta(debugName: "generate_ephemeral_cert", argNames: []);
+
+  @override
+  Future<String> crateApiIdentityGenerateMnemonicWords() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiIdentityGenerateMnemonicWordsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentityGenerateMnemonicWordsConstMeta =>
+      const TaskConstMeta(debugName: "generate_mnemonic_words", argNames: []);
+
+  @override
+  Future<Uint8List> crateApiTrustSignChallenge({
+    required NetworkIdentity identity,
+    required List<int> challenge,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+            identity,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(challenge, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTrustSignChallengeConstMeta,
+        argValues: [identity, challenge],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTrustSignChallengeConstMeta => const TaskConstMeta(
+    debugName: "sign_challenge",
+    argNames: ["identity", "challenge"],
+  );
+
+  @override
+  Future<bool> crateApiIdentityValidateMnemonicWords({required String phrase}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(phrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiIdentityValidateMnemonicWordsConstMeta,
+        argValues: [phrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentityValidateMnemonicWordsConstMeta =>
       const TaskConstMeta(
-        debugName: "generate_identity",
-        argNames: ["displayName"],
+        debugName: "validate_mnemonic_words",
+        argNames: ["phrase"],
       );
+
+  @override
+  Future<bool> crateApiTrustVerifyResponse({
+    required String publicKeyHex,
+    required List<int> challenge,
+    required List<int> signatureBytes,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(publicKeyHex, serializer);
+          sse_encode_list_prim_u_8_loose(challenge, serializer);
+          sse_encode_list_prim_u_8_loose(signatureBytes, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiTrustVerifyResponseConstMeta,
+        argValues: [publicKeyHex, challenge, signatureBytes],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTrustVerifyResponseConstMeta =>
+      const TaskConstMeta(
+        debugName: "verify_response",
+        argNames: ["publicKeyHex", "challenge", "signatureBytes"],
+      );
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_NetworkIdentity => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_NetworkIdentity => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity;
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -218,9 +577,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NetworkIdentity
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  NetworkIdentity
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  NetworkIdentity
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
   }
 
   @protected
@@ -245,16 +637,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LocalIdentity dco_decode_local_identity(dynamic raw) {
+  TlsConfig dco_decode_tls_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
-    return LocalIdentity(
-      deviceId: dco_decode_String(arr[0]),
-      deviceName: dco_decode_String(arr[1]),
-      privateKeyPem: dco_decode_String(arr[2]),
-      certificatePem: dco_decode_String(arr[3]),
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return TlsConfig(
+      keyPem: dco_decode_String(arr[0]),
+      certPem: dco_decode_String(arr[1]),
     );
   }
 
@@ -271,6 +661,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_String(deserializer);
@@ -278,10 +674,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NetworkIdentity
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  NetworkIdentity
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  NetworkIdentity
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return NetworkIdentityImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
     return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
   }
 
   @protected
@@ -306,18 +744,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LocalIdentity sse_decode_local_identity(SseDeserializer deserializer) {
+  TlsConfig sse_decode_tls_config(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_deviceId = sse_decode_String(deserializer);
-    var var_deviceName = sse_decode_String(deserializer);
-    var var_privateKeyPem = sse_decode_String(deserializer);
-    var var_certificatePem = sse_decode_String(deserializer);
-    return LocalIdentity(
-      deviceId: var_deviceId,
-      deviceName: var_deviceName,
-      privateKeyPem: var_privateKeyPem,
-      certificatePem: var_certificatePem,
-    );
+    var var_keyPem = sse_decode_String(deserializer);
+    var var_certPem = sse_decode_String(deserializer);
+    return TlsConfig(keyPem: var_keyPem, certPem: var_certPem);
   }
 
   @protected
@@ -332,15 +763,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
+  int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
+    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -353,9 +784,54 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    NetworkIdentity self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as NetworkIdentityImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    NetworkIdentity self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as NetworkIdentityImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerNetworkIdentity(
+    NetworkIdentity self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as NetworkIdentityImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
   }
 
   @protected
@@ -390,12 +866,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_local_identity(LocalIdentity self, SseSerializer serializer) {
+  void sse_encode_tls_config(TlsConfig self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.deviceId, serializer);
-    sse_encode_String(self.deviceName, serializer);
-    sse_encode_String(self.privateKeyPem, serializer);
-    sse_encode_String(self.certificatePem, serializer);
+    sse_encode_String(self.keyPem, serializer);
+    sse_encode_String(self.certPem, serializer);
   }
 
   @protected
@@ -410,14 +884,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
   }
+}
 
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
-  }
+@sealed
+class NetworkIdentityImpl extends RustOpaque implements NetworkIdentity {
+  // Not to be used by end users
+  NetworkIdentityImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  NetworkIdentityImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_NetworkIdentity,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_NetworkIdentity,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_NetworkIdentityPtr,
+  );
+
+  /// Returns the proof that this Node belongs to the Cluster.
+  Future<Uint8List> getClusterProof() => RustLib.instance.api
+      .crateApiIdentityNetworkIdentityGetClusterProof(that: this);
+
+  Future<String> publicId() =>
+      RustLib.instance.api.crateApiIdentityNetworkIdentityPublicId(that: this);
+
+  /// Verifies that a peer's Node ID was signed by OUR Cluster Key.
+  Future<bool> verifyClusterMembership({
+    required String peerNodeIdHex,
+    required List<int> proof,
+  }) => RustLib.instance.api
+      .crateApiIdentityNetworkIdentityVerifyClusterMembership(
+        that: this,
+        peerNodeIdHex: peerNodeIdHex,
+        proof: proof,
+      );
 }

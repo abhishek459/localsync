@@ -7,16 +7,18 @@ import 'package:local_sync/features/trust/data/trust_providers.dart';
 part 'connection_providers.g.dart';
 
 @Riverpod(keepAlive: true)
-int connectionPort(Ref ref) {
-  return 45678;
+Future<int> activePort(Ref ref) async {
+  final service = await ref.watch(connectionServiceProvider.future);
+  return service?.listeningPort ?? 0;
 }
 
 /// Manages the lifecycle of the ConnectionService.
 /// Asynchronously waits for identity, trust list, and message router to be ready.
 @Riverpod(keepAlive: true)
-Future<ConnectionService> connectionService(Ref ref) async {
-  // Await all critical dependencies
-  final identity = await ref.watch(deviceIdentityProvider.future);
+Future<ConnectionService?> connectionService(Ref ref) async {
+  final identity = await ref.watch(networkIdentityProvider.future);
+  if (identity == null) return null;
+
   final messageRouter = await ref.watch(messageRouterProvider.future);
 
   bool isTrusted(String fingerprint) {
@@ -24,18 +26,14 @@ Future<ConnectionService> connectionService(Ref ref) async {
     return list.any((peer) => peer.fingerprint == fingerprint);
   }
 
-  // Identity, trustList, and router are guaranteed to be ready here.
-  final service = ConnectionService(
+  // Use the async factory to allow Rust cert generation
+  final service = await ConnectionService.create(
     identity: identity,
     isTrusted: isTrusted,
     messageRouter: messageRouter,
   );
 
-  service.startServer();
-
-  ref.onDispose(() {
-    service.dispose();
-  });
-
+  await service.startServer();
+  ref.onDispose(() => service.dispose());
   return service;
 }

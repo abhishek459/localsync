@@ -21,8 +21,18 @@ class TransportProtocol {
 enum MessageType {
   unknown(0x00),
 
-  // -- Auth --
-  auth(0x03),
+  // -- Auth Handshake --
+  /// Step 1: "Hello, I am User X (Public Key)"
+  authHello(0x01),
+
+  /// Step 2: "Prove it. Sign this random data."
+  authChallenge(0x02),
+
+  /// Step 3: "Here is the signature."
+  authResponse(0x03),
+
+  /// Step 4: "You are verified. Welcome."
+  authAck(0x07),
 
   // -- V0.2 Chunked Protocol --
   /// Control packet to initiate a transfer.

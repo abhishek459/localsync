@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_sync/features/connection/application/auto_connection_manager.dart';
 import 'package:local_sync/features/discovery/presentation/peer_list_view.dart';
-import 'package:local_sync/features/identity/data/identity_providers.dart';
 import 'package:local_sync/features/master_key/data/master_key_providers.dart';
 import 'package:local_sync/features/master_key/presentation/master_key_welcome_screen.dart';
 import 'package:local_sync/features/pairing/data/pairing_providers.dart';
@@ -275,7 +274,7 @@ class _PeersTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final identityAsync = ref.watch(deviceIdentityProvider);
+    final pairingDataAsync = ref.watch(myPairingDataProvider);
 
     return Padding(
       padding: const EdgeInsets.all(AppSizes.p6),
@@ -295,7 +294,7 @@ class _PeersTab extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSizes.p4),
-                  identityAsync.when(
+                  pairingDataAsync.when(
                     data: (identity) => SelectableText(
                       identity.deviceId,
                       textAlign: TextAlign.center,

@@ -1,4 +1,4 @@
-import 'package:blockchain_utils/blockchain_utils.dart';
+import 'package:local_sync/src/rust/api/vault.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:local_sync/features/identity/data/identity_providers.dart';
 import 'package:local_sync/features/master_key/application/master_key_service.dart';
@@ -43,27 +43,10 @@ Future<List<int>> vaultAesKey(Ref ref) async {
   }
 
   final mnemonic = rawMnemonic
-      .replaceAll(',', ' ')
-      .replaceAll(RegExp(r'[^a-zA-Z\s]'), '') // Remove unexpected symbols
-      .replaceAll(RegExp(r'\s+'), ' ') // Collapse multiple spaces
+      .replaceAll(RegExp(r'\s+'), ' ')
       .trim()
       .toLowerCase();
 
-  // 2. Convert mnemonic string back to a Mnemonic object
-  final mnemonicObj = Mnemonic.fromString(mnemonic);
-
-  // 3. Convert mnemonic to a 64-byte seed
-  final seed = Bip39SeedGenerator(mnemonicObj).generate();
-
-  // 4. Create a Bip32 master node from the seed
-  final bip32 = Bip32Slip10Secp256k1.fromSeed(seed);
-
-  // 5. Define our app-specific, hardened derivation path
-  // m/44' (BIP44) / 999' (LocalSync App) / 0' (Vault Feature) / 0 (Key Index)
-  final childKey = bip32
-      .derivePath("m/44'/999'/0'/0/0")
-      .privateKey
-      .raw; // Get the raw 32-byte key
-
-  return childKey;
+  // Call Rust Bridge
+  return deriveVaultKey(mnemonic: mnemonic);
 }

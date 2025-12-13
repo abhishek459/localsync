@@ -15,7 +15,7 @@ abstract class PairingData with _$PairingData {
     /// The local IP address (e.g., 192.168.1.5).
     required String ip,
 
-    /// The port the server is listening on (default: 45678).
+    /// The port the server is listening on (default: 0).
     required int port,
   }) = _PairingData;
 

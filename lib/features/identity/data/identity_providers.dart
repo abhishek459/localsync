@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_sync/features/identity/application/identity_service.dart';
-import 'package:local_sync/features/identity/domain/device_identity.dart';
+import 'package:local_sync/features/master_key/data/master_key_providers.dart';
+import 'package:local_sync/src/rust/api/identity.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,26 +13,25 @@ FlutterSecureStorage secureStorage(Ref ref) {
   return const FlutterSecureStorage();
 }
 
-/// Provides the SharedPreferences instance asynchronously.
 @Riverpod(keepAlive: true)
 Future<SharedPreferences> sharedPreferences(Ref ref) {
   return SharedPreferences.getInstance();
 }
 
-/// Provides the main DeviceIdentity object for the app.
-///
-/// This provider handles all asynchronous initialization and provides a
-/// clean AsyncValue (loading, data, error) to the UI.
+/// Provides the IdentityService, injecting dependencies.
 @Riverpod(keepAlive: true)
-Future<DeviceIdentity> deviceIdentity(Ref ref) async {
-  // We depend on SharedPreferences being ready.
+Future<IdentityService> identityService(Ref ref) async {
+  final masterKeyService = ref.watch(masterKeyServiceProvider);
   final prefs = await ref.watch(sharedPreferencesProvider.future);
-  // We also depend on secure storage (which is synchronous).
-  final secureStorage = ref.watch(secureStorageProvider);
+  return IdentityService(masterKeyService, prefs);
+}
 
-  // Once dependencies are ready, create the service.
-  final service = IdentityService(secureStorage, prefs);
-
-  // Get or create the identity. This is the main async work.
-  return service.getOrCreateIdentity();
+/// Provides the active Rust NetworkIdentity.
+/// This will be null if the user hasn't logged in (no Master Key).
+@Riverpod(keepAlive: true)
+Future<NetworkIdentity?> networkIdentity(Ref ref) async {
+  // Wait for the service to be created (async because of SharedPreferences)
+  final service = await ref.watch(identityServiceProvider.future);
+  // Initialize the crypto identity
+  return service.initIdentity();
 }

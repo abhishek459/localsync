@@ -33,6 +33,9 @@ Future<void> decryptFileStream({
   keyBytes: keyBytes,
 );
 
+Future<Uint8List> deriveVaultKey({required String mnemonic}) =>
+    RustLib.instance.api.crateApiVaultDeriveVaultKey(mnemonic: mnemonic);
+
 @freezed
 sealed class EncryptionResult with _$EncryptionResult {
   const factory EncryptionResult({required Uint8List nonce}) =

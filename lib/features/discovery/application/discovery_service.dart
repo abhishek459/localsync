@@ -1,45 +1,47 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:bonsoir/bonsoir.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:local_sync/features/discovery/domain/discovered_peer.dart';
-import 'package:local_sync/features/identity/domain/device_identity.dart';
+import 'package:local_sync/src/rust/api/identity.dart';
 
-/// Handles network discovery (broadcasting and discovering) using mDNS (Bonsoir).
 class DiscoveryService {
-  final DeviceIdentity _identity;
+  final NetworkIdentity _identity;
   final DeviceInfoPlugin _deviceInfo;
-
+  final int _port;
   static const _serviceType = '_localsync._tcp';
-  // Note: This port will be used for our actual socket connection in Step 3.
-  static const _port = 45678;
+  final String _sessionId;
 
   BonsoirBroadcast? _broadcast;
   BonsoirDiscovery? _discovery;
   StreamSubscription<BonsoirDiscoveryEvent>? _discoverySubscription;
   final _peersController = StreamController<List<DiscoveredPeer>>.broadcast();
 
-  // Keep a map of discovered peers to manage the list.
-  // We use the service name as the key (e.g., "My-Pixel-8")
   final Map<String, DiscoveredPeer> _discoveredPeers = {};
 
   DiscoveryService({
-    required DeviceIdentity identity,
+    required NetworkIdentity identity,
     required DeviceInfoPlugin deviceInfo,
+    required int port,
   }) : _identity = identity,
-       _deviceInfo = deviceInfo;
+       _deviceInfo = deviceInfo,
+       _port = port,
+       _sessionId =
+           DateTime.now().millisecondsSinceEpoch.toString() +
+           Random().nextInt(9999).toString();
 
-  /// Starts broadcasting this device's presence on the network.
   Future<void> startBroadcast() async {
     try {
       final deviceName = await _getDeviceName();
+      final deviceId = await _identity.publicId();
 
       final service = BonsoirService(
-        name: deviceName, // e.g., "My Pixel 8"
+        name: deviceName,
         type: _serviceType,
         port: _port,
-        attributes: {'id': _identity.deviceId},
+        attributes: {'id': deviceId, 'session': _sessionId},
       );
 
       _broadcast = BonsoirBroadcast(service: service);
@@ -47,11 +49,10 @@ class DiscoveryService {
       await _broadcast!.initialize();
       await _broadcast!.start();
     } catch (e) {
-      // Log broadcast start error
+      print("Broadcast error: $e");
     }
   }
 
-  /// Stops the mDNS broadcast.
   Future<void> stopBroadcast() async {
     await _broadcast?.stop();
     _broadcast = null;
@@ -75,9 +76,7 @@ class DiscoveryService {
 
       await _discovery!.initialize();
 
-      if (_discovery!.eventStream == null) {
-        return;
-      }
+      if (_discovery!.eventStream == null) return;
 
       _discoverySubscription = _discovery!.eventStream!.listen(
         _handleDiscoveryEvent,
@@ -100,13 +99,13 @@ class DiscoveryService {
     _peersController.add([]);
   }
 
-  void _handleDiscoveryEvent(BonsoirDiscoveryEvent event) {
+  Future<void> _handleDiscoveryEvent(BonsoirDiscoveryEvent event) async {
     if (event is BonsoirDiscoveryServiceFoundEvent) {
       // A new, unresolved service is found. We must resolve it.
       event.service.resolve(_discovery!.serviceResolver);
     } else if (event is BonsoirDiscoveryServiceResolvedEvent) {
       // A service has been resolved, we now have its IP, port, and attributes.
-      _addOrUpdatePeer(event.service);
+      await _addOrUpdatePeer(event.service);
     } else if (event is BonsoirDiscoveryServiceLostEvent) {
       // A service is lost
       if (_discoveredPeers.containsKey(event.service.name)) {
@@ -116,17 +115,14 @@ class DiscoveryService {
     }
   }
 
-  void _addOrUpdatePeer(BonsoirService service) {
+  Future<void> _addOrUpdatePeer(BonsoirService service) async {
     final host = service.host;
     final id = service.attributes['id'];
+    final remoteSession = service.attributes['session'];
 
-    if (host == null || id == null) {
-      return;
-    }
+    if (host == null || id == null) return;
 
-    if (id == _identity.deviceId) {
-      return;
-    }
+    if (remoteSession == _sessionId) return;
 
     final peer = DiscoveredPeer(
       id: id,

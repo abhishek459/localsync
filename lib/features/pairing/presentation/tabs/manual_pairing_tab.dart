@@ -28,7 +28,10 @@ class _ManualPairingTabState extends ConsumerState<ManualPairingTab> {
   @override
   void initState() {
     super.initState();
-    _portController.text = ref.read(connectionPortProvider).toString();
+    final asyncPort = ref.read(activePortProvider);
+    if (asyncPort.hasValue) {
+      _portController.text = asyncPort.value.toString();
+    }
   }
 
   @override
