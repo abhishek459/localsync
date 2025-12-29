@@ -29,10 +29,7 @@ abstract final class AppTheme {
     );
 
     /// Get the default M3 typography for a consistent platform.
-    final typography = Typography.material2021(
-      platform: TargetPlatform.android, // Enforce uniform typography
-      colorScheme: colorScheme,
-    );
+    final typography = Typography.material2021(colorScheme: colorScheme);
 
     // Select the base text theme (black for light, white for dark)
     final defaultTextTheme = brightness == Brightness.light
@@ -43,6 +40,26 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       fontFamily: 'SourceSans3',
+      fontFamilyFallback: const [
+        // 1. Apple Platforms (iOS/macOS)
+        // These specific names target the hidden system font
+        '.AppleSystemUIFont',
+
+        // 2. Windows
+        'Segoe UI',
+        'Arial',
+
+        // 3. Android
+        'Roboto',
+
+        // 4. Linux (Ubuntu/Debian)
+        'Ubuntu',
+        'Cantarell',
+        'Noto Sans',
+
+        // 5. Web / Generic Safety
+        'sans-serif',
+      ],
       textTheme: defaultTextTheme,
 
       /// Theme for AppBar

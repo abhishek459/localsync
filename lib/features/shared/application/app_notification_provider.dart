@@ -16,11 +16,6 @@ final _notificationStreamController =
 /// SnackBars or Dialogs.
 @Riverpod(keepAlive: true)
 Stream<AppNotification> appNotificationStream(Ref ref) {
-  /// Dispose the controller when the app closes.
-  ref.onDispose(() {
-    _notificationStreamController.close();
-  });
-
   /// Return the stream for the UI to listen to.
   return _notificationStreamController.stream;
 }

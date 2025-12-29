@@ -70,7 +70,7 @@ class AppEntry extends ConsumerWidget {
                     color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
                 ),
-                backgroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                backgroundColor: Theme.of(context).colorScheme.errorContainer,
               ),
             );
             break;
